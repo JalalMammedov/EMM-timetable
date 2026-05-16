@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Manage Groups - Smart Timetable System{% endblock %}
+{% block page_title %}Manage Groups{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-users text-primary"></i> <span data-i18n="student_groups">Student Groups</span></h3>
+    </div>
+    <div class="panel-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th data-i18n="group_name">Group Name</th>
+                        <th data-i18n="year">Year</th>
+                        <th data-i18n="group_size">Group Size</th>
+                        <th data-i18n="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for g in groups %}
+                    <tr>
+                        <td><span class="badge badge-primary" style="background: rgba(0,0,0,0.05); color: var(--text);"><strong>{{ g.name }}</strong></span></td>
+                        <td>Year {{ g.year }}</td>
+                        <td>{{ g.size }} Students</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

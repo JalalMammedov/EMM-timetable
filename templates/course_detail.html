@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}{{ course.code }} - {{ course.name }}{% endblock %}
+{% block page_title %}Course Details{% endblock %}
+
+{% block content %}
+
+<div style="margin-bottom: 24px;">
+    <a href="{{ url_for('courses') }}" class="btn btn-outline btn-sm">
+        <i class="fa-solid fa-arrow-left"></i> Back to Courses
+    </a>
+</div>
+
+<!-- Hero Banner -->
+<div style="background: linear-gradient(135deg, {{ course.color }}, #022c22); border-radius: 16px; padding: 40px; margin-bottom: 28px; position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -40px; right: -40px; width: 200px; height: 200px; background: rgba(255,255,255,0.05); border-radius: 50%;"></div>
+    <div style="position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 20px;">
+        <div>
+            <span style="background: rgba(255,255,255,0.2); color: white; border-radius: 8px; padding: 5px 14px; font-size: 13px; font-weight: 700; letter-spacing: 1px; display: inline-block; margin-bottom: 16px;">{{ course.code }}</span>
+            <h1 style="color: white; font-size: 2rem; font-weight: 800; margin-bottom: 8px;" data-i18n-dynamic="true">{{ course.name }}</h1>
+            <p style="color: rgba(255,255,255,0.75); font-size: 14px;">
+                {% if course.is_lab %}<i class="fa-solid fa-flask"></i> Laboratory{% else %}<i class="fa-solid fa-chalkboard"></i> Lecture{% endif %}
+                &nbsp;&bull;&nbsp; <i class="fa-solid fa-clock"></i> {{ course.credits }} Credits
+                {% if user_group %}&nbsp;&bull;&nbsp; <i class="fa-solid fa-users"></i> Group: {{ user_group.name }}{% endif %}
+            </p>
+        </div>
+        <!-- Student grade summary -->
+        {% if session_role == 'student' and enrollment %}
+        <div style="display: flex; gap: 16px;">
+            <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); border-radius: 12px; padding: 16px 24px; text-align: center; border: 1px solid rgba(255,255,255,0.2); min-width: 100px;">
+                {% if enrollment.grade %}
+                <div style="font-size: 32px; font-weight: 800; color: white;">{{ enrollment.grade|int }}%</div>
+                {% else %}
+                <div style="font-size: 20px; font-weight: 700; color: rgba(255,255,255,0.7);">—</div>
+                {% endif %}
+                <div style="font-size: 11px; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">Your Grade</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.15); backdrop-filter: blur(8px); border-radius: 12px; padding: 16px 24px; text-align: center; border: 1px solid rgba(255,255,255,0.2); min-width: 100px;">
+                {% if enrollment.attendance %}
+                <div style="font-size: 32px; font-weight: 800; color: white;">{{ enrollment.attendance|round(0)|int }}%</div>
+                {% else %}
+                <div style="font-size: 20px; font-weight: 700; color: rgba(255,255,255,0.7);">—</div>
+                {% endif %}
+                <div style="font-size: 11px; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">Attendance</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Main layout -->
+<div style="display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start;">
+<div>
+
+<!-- STUDENT VIEW -->
+{% if session_role == 'student' %}
+
+<!-- My Schedule for this course (student's group only) -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-calendar-week text-primary"></i> My Class Sessions</h3>
+        <span class="badge badge-primary">{{ my_schedule|length }} session(s)</span>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        {% if my_schedule %}
+            {% for item in my_schedule %}
+            <div style="display: flex; align-items: center; gap: 20px; padding: 16px 24px; border-bottom: 1px solid var(--border);">
+                <span class="badge badge-primary" style="min-width: 110px; text-align: center; padding: 6px 10px;" data-i18n-dynamic="true">{{ item.entry.day }}</span>
+                <div style="min-width: 110px; text-align: center; background: var(--primary-light); border-radius: 10px; padding: 8px 12px;">
+                    <div style="font-weight: 700; color: var(--primary-dark); font-size: 14px;">{{ item.entry.time_start }}</div>
+                    <div style="font-size: 10px; color: var(--muted);">to</div>
+                    <div style="font-weight: 700; color: var(--primary-dark); font-size: 14px;">{{ item.entry.time_end }}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: var(--muted);">
+                        <i class="fa-solid fa-door-open" style="color: var(--primary);"></i>
+                        Room: <strong style="color: var(--text);">{% if item.room %}{{ item.room.name }}{% else %}TBA{% endif %}</strong>
+                        {% if item.room and item.room.is_lab %}
+                            <span class="badge badge-warning" style="font-size: 10px; margin-left: 6px;"><i class="fa-solid fa-flask"></i> Lab</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--muted);">
+            <i class="fa-regular fa-calendar-xmark" style="font-size: 36px; color: var(--border); display: block; margin-bottom: 12px;"></i>
+            <p>No sessions scheduled for your group in this course yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Grade Breakdown -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-chart-bar text-primary"></i> Your Performance</h3>
+    </div>
+    <div class="panel-body">
+        {% if enrollment %}
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+            <div style="background: var(--primary-light); border-radius: 12px; padding: 20px; text-align: center;">
+                <div style="font-size: 36px; font-weight: 800; color: var(--primary-dark);">{% if enrollment.grade %}{{ enrollment.grade|int }}%{% else %}—{% endif %}</div>
+                <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Current Grade</div>
+                {% if enrollment.grade %}
+                <div style="margin-top: 10px;">
+                    {% if enrollment.grade >= 90 %}<span class="badge badge-success">Excellent</span>
+                    {% elif enrollment.grade >= 75 %}<span class="badge badge-primary">Good</span>
+                    {% elif enrollment.grade >= 60 %}<span class="badge badge-warning">Average</span>
+                    {% else %}<span class="badge badge-danger">Needs Improvement</span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div style="background: #dbeafe; border-radius: 12px; padding: 20px; text-align: center;">
+                <div style="font-size: 36px; font-weight: 800; color: #1e40af;">{% if enrollment.attendance %}{{ enrollment.attendance|round(1) }}%{% else %}—{% endif %}</div>
+                <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Attendance</div>
+                {% if enrollment.attendance %}
+                <div style="margin-top: 10px;">
+                    {% if enrollment.attendance >= 90 %}<span class="badge badge-success">Excellent</span>
+                    {% elif enrollment.attendance >= 75 %}<span class="badge badge-primary">Satisfactory</span>
+                    {% else %}<span class="badge badge-danger">At Risk</span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; background: var(--bg); border-radius: 8px; padding: 12px 16px;">
+            <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i>
+            <span>Enrollment status: <strong style="color: var(--text);">{{ enrollment.status|capitalize }}</strong></span>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 32px; color: var(--muted);">
+            <p>You are not enrolled in this course.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+
+{% else %}
+
+<!-- TEACHER / ADMIN VIEW -->
+<!-- Full schedule with all groups -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-calendar-week text-primary"></i> Full Schedule</h3>
+        <span class="badge badge-primary">{{ schedule|length }} session(s)</span>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        {% if schedule %}
+            {% for item in schedule %}
+            <div style="display: flex; align-items: center; gap: 20px; padding: 16px 24px; border-bottom: 1px solid var(--border);">
+                <span class="badge badge-primary" style="min-width: 110px; text-align: center;" data-i18n-dynamic="true">{{ item.entry.day }}</span>
+                <div style="min-width: 100px; text-align: center; background: var(--primary-light); border-radius: 10px; padding: 8px 10px;">
+                    <div style="font-weight: 700; color: var(--primary-dark); font-size: 13px;">{{ item.entry.time_start }}</div>
+                    <div style="font-size: 10px; color: var(--muted);">to</div>
+                    <div style="font-weight: 700; color: var(--primary-dark); font-size: 13px;">{{ item.entry.time_end }}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; margin-bottom: 3px;"><i class="fa-solid fa-door-open" style="color: var(--primary);"></i> Room: <strong>{% if item.room %}{{ item.room.name }}{% else %}TBA{% endif %}</strong></div>
+                    <div style="font-size: 13px; color: var(--muted);"><i class="fa-solid fa-users" style="color: var(--primary);"></i> Group: <strong style="color: var(--text);">{% if item.group %}{{ item.group.name }}{% else %}TBA{% endif %}</strong></div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--muted);">No sessions scheduled yet.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Enrolled students -->
+{% if enrolled_students %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-user-graduate text-primary"></i> Enrolled Students</h3>
+        <span class="badge badge-success">{{ enrolled_students|length }} students</span>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Department</th>
+                    <th>Grade</th>
+                    <th>Attendance</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in enrolled_students %}
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">{{ item.student.avatar_initials or item.student.full_name[:2]|upper }}</div>
+                            <span style="font-weight: 500;">{{ item.student.full_name }}</span>
+                        </div>
+                    </td>
+                    <td style="color: var(--muted);">{{ item.student.department or '—' }}</td>
+                    <td>
+                        {% if session_role == 'teacher' %}
+                        <form action="{{ url_for('grade_student', course_id=course.id) }}" method="POST" style="display: flex; gap: 8px; align-items: center;">
+                            <input type="hidden" name="student_id" value="{{ item.student.id }}">
+                            <input type="number" name="grade" class="form-control" style="width: 70px; height: 30px; padding: 4px 8px; font-size: 13px;" placeholder="Grade %" value="{{ item.enrollment.grade|int if item.enrollment.grade else '' }}">
+                            <input type="number" name="attendance" class="form-control" style="width: 70px; height: 30px; padding: 4px 8px; font-size: 13px;" placeholder="Att %" value="{{ item.enrollment.attendance|round(1) if item.enrollment.attendance else '' }}">
+                            <button type="submit" class="btn btn-sm btn-primary" style="padding: 4px 10px;">Save</button>
+                        </form>
+                        {% else %}
+                            {% if item.enrollment.grade %}<strong style="color: var(--primary-dark);">{{ item.enrollment.grade|int }}%</strong>{% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    {% if session_role != 'teacher' %}
+                    <td>{% if item.enrollment.attendance %}<span style="font-weight: 500;">{{ item.enrollment.attendance|round(1) }}%</span>{% else %}—{% endif %}</td>
+                    {% endif %}
+                    <td><span class="badge badge-{{ 'success' if item.enrollment.status == 'active' else 'warning' }}">{{ item.enrollment.status|capitalize }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+<!-- Course Materials (Visible to all) -->
+<div class="panel">
+    <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h3 class="panel-title" style="display: inline-block; margin-right: 12px;"><i class="fa-solid fa-folder-open text-primary"></i> Course Materials</h3>
+            <span class="badge badge-primary">{{ materials|length }} files</span>
+        </div>
+        {% if session_role == 'teacher' %}
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('add-material-form').style.display='block'">
+            <i class="fa-solid fa-plus"></i> Add Material
+        </button>
+        {% endif %}
+    </div>
+    
+    {% if session_role == 'teacher' %}
+    <div id="add-material-form" style="display: none; padding: 20px; border-bottom: 1px solid var(--border); background: var(--bg);">
+        <form action="{{ url_for('add_course_material', course_id=course.id) }}" method="POST">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <label class="form-label">Material Title</label>
+                    <input type="text" name="title" class="form-control" required placeholder="e.g., Week 3 Lecture Slides">
+                </div>
+                <div>
+                    <label class="form-label">File Type</label>
+                    <select name="file_type" class="form-control">
+                        <option value="pdf">PDF Document</option>
+                        <option value="ppt">PowerPoint</option>
+                        <option value="doc">Word Document</option>
+                        <option value="link">External Link</option>
+                        <option value="video">Video</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label class="form-label">URL or File Path</label>
+                <input type="text" name="file_url" class="form-control" placeholder="https://...">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('add-material-form').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary">Upload Material</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <div class="panel-body" style="padding: 0;">
+        {% if materials %}
+            {% for mat in materials %}
+            <div style="display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--border); transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+                <div style="width: 40px; height: 40px; border-radius: 8px; background: var(--primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fa-solid {% if mat.file_type == 'pdf' %}fa-file-pdf{% elif mat.file_type == 'ppt' %}fa-file-powerpoint{% elif mat.file_type == 'doc' %}fa-file-word{% elif mat.file_type == 'video' %}fa-video{% else %}fa-link{% endif %}" style="color: var(--primary); font-size: 18px;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; font-size: 14px;">{{ mat.title }}</div>
+                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase;">{{ mat.file_type }}</div>
+                </div>
+                <a href="{{ mat.file_url if mat.file_url else '#' }}" class="btn btn-sm btn-outline"><i class="fa-solid fa-download"></i></a>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: 32px; color: var(--muted);">
+            <p>No course materials have been uploaded yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+</div>
+
+<!-- Right sidebar -->
+<div>
+
+<!-- Course Info -->
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-circle-info text-primary"></i> Course Info</h3>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border);">
+            <div style="width: 34px; height: 34px; background: var(--primary-light); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-hashtag" style="color: var(--primary);"></i></div>
+            <div><div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Code</div><div style="font-weight: 600;">{{ course.code }}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border);">
+            <div style="width: 34px; height: 34px; background: var(--primary-light); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-clock" style="color: var(--primary);"></i></div>
+            <div><div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Credits</div><div style="font-weight: 600;">{{ course.credits }}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border);">
+            <div style="width: 34px; height: 34px; background: var(--primary-light); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid {% if course.is_lab %}fa-flask{% else %}fa-chalkboard{% endif %}" style="color: var(--primary);"></i></div>
+            <div><div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Type</div><div style="font-weight: 600;">{% if course.is_lab %}Laboratory{% else %}Lecture{% endif %}</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border);">
+            <div style="width: 34px; height: 34px; background: var(--primary-light); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-users" style="color: var(--primary);"></i></div>
+            <div><div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Enrolled</div><div style="font-weight: 600;">{{ enrolled_count }} student(s)</div></div>
+        </div>
+        {% if user_group and session_role == 'student' %}
+        <div style="display: flex; align-items: center; gap: 14px; padding: 14px 20px;">
+            <div style="width: 34px; height: 34px; background: #d1fae5; border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i class="fa-solid fa-people-group" style="color: #065f46;"></i></div>
+            <div><div style="font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">Your Group</div><div style="font-weight: 600; color: #065f46;">{{ user_group.name }}</div></div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Instructor -->
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-chalkboard-user text-primary"></i> Instructor</h3>
+    </div>
+    <div class="panel-body" style="text-align: center; padding: 28px 24px;">
+        {% if teacher %}
+        <div style="width: 72px; height: 72px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; margin: 0 auto 16px;">{{ teacher.avatar_initials or teacher.full_name[:2]|upper }}</div>
+        <h3 style="font-size: 16px; margin-bottom: 4px;">{{ teacher.full_name }}</h3>
+        <p style="color: var(--muted); font-size: 13px; margin-bottom: 16px;">{{ teacher.department }}</p>
+        <div style="background: var(--bg); border-radius: 10px; padding: 12px 16px; text-align: left;">
+            <div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;"><i class="fa-solid fa-envelope" style="color: var(--primary);"></i> Email</div>
+            <div style="font-size: 13px; font-weight: 500; word-break: break-all;">{{ teacher.email }}</div>
+        </div>
+        {% else %}
+        <p style="color: var(--muted); padding: 20px;">Instructor not yet assigned.</p>
+        {% endif %}
+    </div>
+</div>
+
+</div>
+</div>
+{% endblock %}

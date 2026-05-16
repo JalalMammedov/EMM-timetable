@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Manage Rooms - Smart Timetable System{% endblock %}
+{% block page_title %}Manage Rooms{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-door-open text-primary"></i> <span data-i18n="campus_rooms">Campus Rooms</span></h3>
+    </div>
+    <div class="panel-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th data-i18n="room_name">Room Name</th>
+                        <th data-i18n="capacity">Capacity</th>
+                        <th data-i18n="room_type">Room Type</th>
+                        <th data-i18n="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rooms %}
+                    <tr>
+                        <td><strong>{{ r.name }}</strong></td>
+                        <td>{{ r.capacity }} Students</td>
+                        <td>
+                            {% if r.is_lab %}
+                                <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> Laboratory</span>
+                            {% else %}
+                                <span class="badge badge-primary"><i class="fa-solid fa-chalkboard"></i> Standard Class</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
+                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

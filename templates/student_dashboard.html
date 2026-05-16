@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard - Smart Timetable System{% endblock %}
+{% block page_title %}<span data-i18n="student_dashboard_title">Student Dashboard</span>{% endblock %}
+
+{% block content %}
+<div class="panel" style="background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: white;">
+    <div class="panel-body" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2 style="color: white; margin-bottom: 8px;"><span data-i18n="welcome_back">Welcome back</span>, {{ user.full_name }}!</h2>
+            <p style="color: rgba(255,255,255,0.8);"><i class="fa-solid fa-graduation-cap"></i> <span data-i18n-dynamic="true">{{ user.department }}</span> &bull; <span data-i18n="year_prefix">Year</span> {{ user.year }}</p>
+        </div>
+        <div style="text-align: right;">
+            <p style="font-size: 12px; color: rgba(255,255,255,0.7); text-transform: uppercase;" data-i18n="current_semester">Current Semester</p>
+            <h3 style="color: white;" data-i18n-dynamic="true">Spring 2026</h3>
+        </div>
+    </div>
+</div>
+
+<div class="grid-cards">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-book"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="active_courses">Active Courses</h3>
+            <p>{{ courses|length }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-star"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="avg_grade">Average Grade</h3>
+            <p>{{ avg_grade }}%</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-clipboard-user"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="attendance">Attendance</h3>
+            <p>{{ avg_att }}%</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: #fef3c7; color: #92400e;"><i class="fa-solid fa-bell"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="announcements">Announcements</h3>
+            <p>{{ announcements|length }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-bullhorn text-primary"></i> <span data-i18n="recent_announcements">Recent Announcements</span></h3>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        {% for ann in announcements %}
+        <div style="padding: 16px 24px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="badge badge-{{ 'danger' if ann.type == 'important' else ('warning' if ann.type == 'warning' else 'info') }}" style="font-size: 10px;" data-i18n-dynamic="true">{{ ann.type|upper }}</span>
+                <span style="font-size: 12px; color: var(--muted);">{{ ann.date }}</span>
+            </div>
+            <p style="font-weight: 500; font-size: 14px;" data-i18n-dynamic="true">{{ ann.title }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="panel" style="text-align: center; padding: 32px;">
+    <i class="fa-solid fa-calendar-week" style="font-size: 40px; color: var(--primary); margin-bottom: 16px; display: block;"></i>
+    <h3 style="margin-bottom: 8px;" data-i18n="my_timetable">My Timetable</h3>
+    <p style="color: var(--muted); margin-bottom: 20px; font-size: 14px;">View your full weekly schedule on the dedicated timetable page.</p>
+    <a href="{{ url_for('student_timetable') }}" class="btn btn-primary">
+        <i class="fa-solid fa-calendar-week"></i> View My Timetable
+    </a>
+</div>
+
+{% endblock %}

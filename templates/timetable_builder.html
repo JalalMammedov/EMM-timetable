@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Timetable Builder - Admin{% endblock %}
+{% block page_title %}<span data-i18n="builder_title">Smart Timetable Builder</span>{% endblock %}
+
+{% block content %}
+<section class="excel-builder-header">
+    <div>
+        <p class="section-kicker">Excel Scheduling Engine</p>
+        <h2 class="excel-builder-title">
+            <i class="fa-solid fa-calendar-check text-primary"></i>
+            Smart Timetable Builder
+        </h2>
+        <p class="excel-builder-subtitle">
+            Upload academic Excel data and generate an optimized conflict-free weekly timetable.
+        </p>
+    </div>
+    <a href="{{ url_for('download_template') }}" class="btn btn-outline">
+        <i class="fa-solid fa-file-arrow-down"></i>
+        Download Excel Template
+    </a>
+</section>
+
+{% if not excel_available %}
+<div class="alert alert-error builder-alert">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <strong>Missing libraries:</strong> Run <code>pip install -r requirements.txt</code>, then restart the server.
+</div>
+{% endif %}
+
+<section class="panel smart-builder-panel" id="upload-section">
+    <div class="panel-header">
+        <div>
+            <p class="panel-eyebrow">Step 1</p>
+            <h3 class="panel-title">
+                <i class="fa-solid fa-cloud-arrow-up text-primary"></i>
+                Upload Excel Data
+            </h3>
+        </div>
+        <span class="accepted-format-badge">.xlsx, .xls</span>
+    </div>
+    <div class="panel-body">
+        <div class="excel-upload-zone" id="upload-zone" role="button" tabindex="0" aria-label="Upload Excel timetable file">
+            <input type="file" id="excel-file-input" accept=".xlsx,.xls" hidden>
+            <div class="upload-zone-icon">
+                <i class="fa-solid fa-file-excel"></i>
+            </div>
+            <div class="upload-zone-text">
+                <strong>Drag and drop your Excel file here</strong>
+                <span>or click to browse academic scheduling data</span>
+            </div>
+            <div id="file-preview" class="file-preview" hidden>
+                <i class="fa-solid fa-file-excel text-primary"></i>
+                <span id="file-name-label"></span>
+                <button type="button" class="btn-clear-file" id="btn-clear-file" aria-label="Clear selected file">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        {% if last_upload %}
+        <div class="last-upload-info">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Last upload:</span>
+            <strong>{{ last_upload.filename }}</strong>
+            <span>{{ last_upload.uploaded_at.strftime('%d %b %Y %H:%M') }}</span>
+            <span class="badge badge-success">{{ last_upload.analysis_status }}</span>
+            <button class="btn btn-outline btn-sm" type="button" id="btn-reuse-last" data-filename="{{ last_upload.filename }}">
+                <i class="fa-solid fa-rotate-right"></i>
+                Use This File
+            </button>
+        </div>
+        {% endif %}
+
+        <div class="builder-actions">
+            <a href="{{ url_for('download_template') }}" class="btn btn-outline">
+                <i class="fa-solid fa-file-arrow-down"></i>
+                Download Excel Template
+            </a>
+            <button class="btn btn-primary" id="btn-analyze" type="button" disabled>
+                <i class="fa-solid fa-magnifying-glass-chart"></i>
+                Analyze Excel
+            </button>
+        </div>
+    </div>
+</section>
+
+<section id="analysis-section" hidden>
+    <div class="panel smart-builder-panel">
+        <div class="panel-header">
+            <div>
+                <p class="panel-eyebrow">Step 2</p>
+                <h3 class="panel-title">
+                    <i class="fa-solid fa-chart-simple text-primary"></i>
+                    Parsed Data Summary
+                </h3>
+            </div>
+            <span class="badge badge-success" id="analysis-status-badge">
+                <i class="fa-solid fa-check"></i>
+                Analysis Complete
+            </span>
+        </div>
+        <div class="panel-body">
+            <div class="summary-cards" id="summary-cards"></div>
+            <div id="validation-panel" class="validation-panel" hidden>
+                <div class="validation-header" id="validation-header"></div>
+                <ul class="validation-list" id="validation-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel smart-builder-panel">
+        <div class="panel-header">
+            <div>
+                <p class="panel-eyebrow">Step 3</p>
+                <h3 class="panel-title">
+                    <i class="fa-solid fa-wand-magic-sparkles text-primary"></i>
+                    Generation Controls
+                </h3>
+            </div>
+        </div>
+        <div class="panel-body">
+            <div class="generation-controls">
+                <button class="btn btn-primary btn-lg" id="btn-generate" type="button">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    Generate Optimal Timetable
+                </button>
+                <button class="btn btn-outline" id="btn-export" type="button" hidden>
+                    <i class="fa-solid fa-file-export"></i>
+                    Export Timetable
+                </button>
+                <button class="btn btn-outline btn-danger-outline" id="btn-clear-results" type="button">
+                    <i class="fa-solid fa-trash"></i>
+                    Clear Results
+                </button>
+            </div>
+            <div id="generating-status" class="generating-status" hidden>
+                <div class="spinner"></div>
+                <span>Analyzing Excel data and optimizing timetable...</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="results-section" hidden>
+    <div class="grid-cards" id="result-summary-cards"></div>
+
+    <div class="panel smart-builder-panel">
+        <div class="panel-header">
+            <h3 class="panel-title">
+                <i class="fa-solid fa-table text-primary"></i>
+                Generated Timetable
+            </h3>
+            <button class="btn btn-sm btn-outline" id="btn-toggle-view" type="button">
+                <i class="fa-solid fa-calendar-week" id="view-toggle-icon"></i>
+                <span id="view-toggle-text">Weekly Grid</span>
+            </button>
+        </div>
+        <div class="panel-body timetable-table-body" id="table-view">
+            <table class="table result-table" id="result-table">
+                <thead>
+                    <tr>
+                        <th>Day</th>
+                        <th>Time</th>
+                        <th>Course</th>
+                        <th>Teacher</th>
+                        <th>Room</th>
+                        <th>Group</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="result-tbody"></tbody>
+            </table>
+        </div>
+        <div id="grid-view" class="weekly-grid-wrap" hidden>
+            <div class="weekly-grid" id="weekly-grid-container"></div>
+        </div>
+    </div>
+
+    <div class="panel conflict-panel" id="conflict-panel" hidden>
+        <div class="panel-header">
+            <h3 class="panel-title conflict-title">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                Conflict Report
+            </h3>
+            <span class="badge badge-warning" id="conflict-count-badge"></span>
+        </div>
+        <div class="panel-body">
+            <ul class="conflict-list" id="conflict-list"></ul>
+        </div>
+    </div>
+</section>
+
+{% if last_results %}
+<section class="panel smart-builder-panel previous-results-panel">
+    <div class="panel-header">
+        <h3 class="panel-title">
+            <i class="fa-solid fa-clock-rotate-left text-primary"></i>
+            Previous Generated Timetable
+        </h3>
+        <a href="{{ url_for('export_timetable') }}" class="btn btn-sm btn-outline">
+            <i class="fa-solid fa-file-export"></i>
+            Export
+        </a>
+    </div>
+    <div class="panel-body timetable-table-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>Time</th>
+                    <th>Course</th>
+                    <th>Teacher</th>
+                    <th>Room</th>
+                    <th>Group</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for e in last_results %}
+                <tr>
+                    <td><span class="badge badge-primary">{{ e.day }}</span></td>
+                    <td>{{ e.start_time }} - {{ e.end_time }}</td>
+                    <td><strong>{{ e.course_id }}</strong> {{ e.course_name }}</td>
+                    <td>{{ e.teacher_name }}</td>
+                    <td>
+                        {% if e.course_type == 'lab' %}
+                        <span class="badge lab-room-badge"><i class="fa-solid fa-flask"></i> {{ e.room_name }}</span>
+                        {% else %}
+                        {{ e.room_name }}
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-info">{{ e.group_name }}</span></td>
+                    <td><span class="badge {% if e.course_type == 'lab' %}badge-warning{% else %}badge-primary{% endif %}">{{ e.course_type }}</span></td>
+                    <td><span class="badge badge-success"><i class="fa-solid fa-check"></i> {{ e.status }}</span></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

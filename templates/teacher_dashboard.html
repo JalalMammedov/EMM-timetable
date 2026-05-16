@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Teacher Dashboard - Smart Timetable System{% endblock %}
+{% block page_title %}Teacher Dashboard{% endblock %}
+
+{% block content %}
+<div class="panel" style="background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: white;">
+    <div class="panel-body" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2 style="color: white; margin-bottom: 8px;">Welcome back, {{ user.full_name }}!</h2>
+            <p style="color: rgba(255,255,255,0.8);"><i class="fa-solid fa-chalkboard-user"></i> Department of {{ user.department }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="grid-cards">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-book-open"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="assigned_classes">Assigned Classes</h3>
+            <p>{{ courses|length }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-users"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="total_students">Total Students</h3>
+            <p>{{ student_count }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-clock"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="weekly_hours">Weekly Hours</h3>
+            <p>{{ weekly_hours }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: #fef3c7; color: #92400e;"><i class="fa-solid fa-clipboard-list"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="pending_grades">Pending Grades</h3>
+            <p>{{ pending }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-calendar-day text-primary"></i> <span data-i18n="teaching_schedule">Teaching Schedule</span></h3>
+    </div>
+    <div class="panel-body">
+        {% if timetable %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th data-i18n="day">Day</th>
+                        <th data-i18n="time">Time</th>
+                        <th data-i18n="course">Course</th>
+                        <th data-i18n="room">Room</th>
+                        <th data-i18n="group">Group</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in timetable %}
+                    <tr>
+                        <td><span class="badge badge-primary">{{ item.entry.day }}</span></td>
+                        <td style="font-weight: 500;">{{ item.entry.time_start }} - {{ item.entry.time_end }}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ item.course.color }};"></div>
+                                <strong>{{ item.course.code }}</strong> {{ item.course.name }}
+                            </div>
+                        </td>
+                        <td>{{ item.room.name }}</td>
+                        <td><span class="badge badge-info">{{ item.group.name }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--muted);">
+            <i class="fa-regular fa-calendar-xmark" style="font-size: 48px; margin-bottom: 16px; color: var(--border);"></i>
+            {% if not is_published %}
+            <p>The teaching schedule has not been published yet. Please check back later.</p>
+            {% else %}
+            <p>No classes scheduled for you yet.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

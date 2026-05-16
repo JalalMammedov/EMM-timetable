@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Smart Timetable System{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="panel" style="background: linear-gradient(135deg, var(--primary-dark), #022c22); color: white;">
+    <div class="panel-body" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2 style="color: white; margin-bottom: 8px;" data-i18n="admin_dashboard_title">University Administration</h2>
+            <p style="color: rgba(255,255,255,0.8);"><i class="fa-solid fa-building-columns"></i> {{ session_uni }} <span data-i18n="system_status">System Status</span></p>
+        </div>
+        <div>
+            <a href="{{ url_for('timetable_builder') }}" class="btn" style="background: white; color: var(--primary-dark);">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="open_builder">Open Timetable Builder</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="grid-cards">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-user-graduate"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="total_students">Total Students</h3>
+            <p>{{ stats.students }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-chalkboard-teacher"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="total_teachers">Total Teachers</h3>
+            <p>{{ stats.teachers }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-book-open"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="nav_courses">Courses</h3>
+            <p>{{ stats.courses }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-door-open"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="nav_rooms">Rooms</h3>
+            <p>{{ stats.rooms }}</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: #fef3c7; color: #92400e;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="stat-details">
+            <h3 data-i18n="conflicts">Conflicts</h3>
+            <p>0</p>
+        </div>
+    </div>
+</div>
+
+<div class="builder-layout">
+    <div style="flex: 1;">
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fa-solid fa-clock-rotate-left text-primary"></i> <span data-i18n="recent_entries">Recently Generated Entries</span></h3>
+            </div>
+            <div class="panel-body">
+                {% if recent_entries %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Time</th>
+                                <th>Course</th>
+                                <th>Teacher</th>
+                                <th>Room</th>
+                                <th>Group</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in recent_entries %}
+                            <tr>
+                                <td><span class="badge badge-primary">{{ item.entry.day }}</span></td>
+                                <td style="font-weight: 500;">{{ item.entry.time_start }}</td>
+                                <td><strong>{{ item.course.code }}</strong></td>
+                                <td>{{ item.teacher.full_name }}</td>
+                                <td>{{ item.room.name }}</td>
+                                <td><span class="badge badge-info">{{ item.group.name }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4">No timetable entries found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div style="width: 320px;">
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fa-solid fa-bolt text-primary"></i> <span data-i18n="quick_actions">Quick Actions</span></h3>
+            </div>
+            <div class="panel-body" style="display: flex; flex-direction: column; gap: 12px;">
+                <a href="{{ url_for('timetable_builder') }}" class="btn btn-primary" style="width: 100%; justify-content: flex-start;">
+                    <i class="fa-solid fa-calendar-plus" style="width: 24px;"></i> <span data-i18n="generate_timetable">Generate Timetable</span>
+                </a>
+                <a href="{{ url_for('admin_students') }}" class="btn btn-outline" style="width: 100%; justify-content: flex-start;">
+                    <i class="fa-solid fa-user-graduate" style="width: 24px;"></i> <span data-i18n="manage_students">Manage Students</span>
+                </a>
+                <a href="{{ url_for('admin_teachers') }}" class="btn btn-outline" style="width: 100%; justify-content: flex-start;">
+                    <i class="fa-solid fa-chalkboard-teacher" style="width: 24px;"></i> <span data-i18n="manage_teachers">Manage Teachers</span>
+                </a>
+                <a href="{{ url_for('admin_courses') }}" class="btn btn-outline" style="width: 100%; justify-content: flex-start;">
+                    <i class="fa-solid fa-book-open" style="width: 24px;"></i> <span data-i18n="manage_courses">Manage Courses</span>
+                </a>
+                <a href="{{ url_for('admin_rooms') }}" class="btn btn-outline" style="width: 100%; justify-content: flex-start;">
+                    <i class="fa-solid fa-door-open" style="width: 24px;"></i> <span data-i18n="manage_rooms">Manage Rooms</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

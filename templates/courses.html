@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Courses - Smart Timetable System{% endblock %}
+{% block page_title %}<span data-i18n="nav_courses">Courses</span>{% endblock %}
+
+{% block content %}
+<div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-body" style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+        <div style="flex: 1; max-width: 400px; position: relative;">
+            <i class="fa-solid fa-search" style="position: absolute; left: 16px; top: 14px; color: var(--muted);"></i>
+            <input type="text" id="courseSearch" class="form-control" placeholder="Search courses by code or name..." style="padding-left: 40px;" data-i18n="search_placeholder">
+        </div>
+        
+        <div style="display: flex; gap: 12px;">
+            <select class="form-control" style="width: auto;">
+                <option value="" data-i18n="all_semesters">All Semesters</option>
+                <option value="spring2026" selected data-i18n-dynamic="true">Spring 2026</option>
+                <option value="fall2025" data-i18n-dynamic="true">Fall 2025</option>
+            </select>
+            
+            <div style="display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                <button class="btn" style="border-radius: 0; background: white; color: var(--primary);"><i class="fa-solid fa-grid-2"></i></button>
+                <button class="btn" style="border-radius: 0; border-left: 1px solid var(--border); color: var(--muted);"><i class="fa-solid fa-list"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="course-grid">
+    {% for item in courses %}
+    <div class="course-card">
+        <div class="course-banner" style="--card-color: {{ item.course.color }}; background: linear-gradient(135deg, var(--card-color), #022c22);">
+            <div class="course-code-badge">{{ item.course.code }}</div>
+            <h3 class="course-title" data-i18n-dynamic="true">{{ item.course.name }}</h3>
+        </div>
+        <div class="course-body">
+            <div class="course-meta">
+                <span><i class="fa-solid fa-clock"></i> {{ item.course.credits }} <span data-i18n="credits">Credits</span></span>
+                <span>&bull;</span>
+                <span>
+                    {% if item.course.is_lab %}
+                        <i class="fa-solid fa-flask"></i> <span data-i18n="lab_required">Lab Required</span>
+                    {% else %}
+                        <i class="fa-solid fa-chalkboard"></i> <span data-i18n="lecture">Lecture</span>
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div class="course-teacher">
+                <span class="text-muted" style="display: block; font-size: 12px; margin-bottom: 2px;" data-i18n="instructor">Instructor</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold;">
+                        {{ item.teacher.avatar_initials if item.teacher else 'TBA' }}
+                    </div>
+                    <span data-i18n-dynamic="true">{{ item.teacher.full_name if item.teacher else 'To Be Announced' }}</span>
+                </div>
+            </div>
+            
+            <div class="course-footer">
+                {% if session_role == 'student' %}
+                    {% if item.enrollment %}
+                        <span class="badge badge-success" data-i18n="enrolled">Enrolled</span>
+                    {% else %}
+                        <span class="badge badge-warning" data-i18n="available">Available</span>
+                    {% endif %}
+                {% elif session_role == 'teacher' %}
+                    <span class="badge badge-primary" data-i18n="my_course">My Course</span>
+                {% else %}
+                    <span class="badge badge-info" data-i18n="active_status">Active</span>
+                {% endif %}
+                
+                <a href="{{ url_for('course_detail', course_id=item.course.id) }}" class="btn btn-sm btn-outline" data-i18n="view_details">View Details</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

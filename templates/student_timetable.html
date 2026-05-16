@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}My Timetable - Smart Timetable System{% endblock %}
+{% block page_title %}<span data-i18n="my_timetable">My Timetable</span>{% endblock %}
+
+{% block content %}
+
+{% if not is_published %}
+<!-- Unpublished State -->
+<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; text-align: center;">
+    <div style="width: 96px; height: 96px; background: #fef3c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+        <i class="fa-solid fa-clock" style="font-size: 40px; color: #d97706;"></i>
+    </div>
+    <h2 style="font-size: 22px; margin-bottom: 12px; color: var(--text);">Timetable Not Published Yet</h2>
+    <p style="color: var(--muted); max-width: 440px; line-height: 1.7;">The administration has not published the timetable yet. Please check back later — you'll be able to view your full weekly schedule here once it is released.</p>
+</div>
+
+{% else %}
+
+<!-- Header stats bar -->
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px;">
+    <div>
+        <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">
+            <i class="fa-solid fa-calendar-week" style="color: var(--primary);"></i> Weekly Schedule
+            {% if user_group %}<span style="font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 8px;">— Group {{ user_group.name }}</span>{% endif %}
+        </h2>
+        <p style="color: var(--muted); font-size: 13px;">{{ total }} class session{{ 's' if total != 1 else '' }} scheduled for your group this week</p>
+    </div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        {% for day in days_order %}
+        {% if timetable_by_day[day] %}
+        <span class="badge badge-primary" style="padding: 6px 14px; font-size: 12px;">
+            {{ day[:3] }}: {{ timetable_by_day[day]|length }} class{{ 'es' if timetable_by_day[day]|length != 1 else '' }}
+        </span>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+
+{% if total == 0 %}
+<div class="panel" style="padding: 60px; text-align: center;">
+    <i class="fa-regular fa-calendar-xmark" style="font-size: 52px; color: var(--border); margin-bottom: 16px; display: block;"></i>
+    <p style="color: var(--muted); font-size: 15px;" data-i18n="no_timetable">No timetable generated for your group yet.</p>
+</div>
+{% else %}
+
+<!-- Day-by-day panels -->
+{% for day in days_order %}
+{% if timetable_by_day[day] %}
+<div class="panel" style="margin-bottom: 20px;">
+    <div class="panel-header" style="background: linear-gradient(90deg, var(--primary-dark), var(--primary)); padding: 14px 24px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; background: rgba(255,255,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                <i class="fa-solid fa-calendar-day" style="color: white; font-size: 15px;"></i>
+            </div>
+            <div>
+                <h3 style="color: white; font-size: 16px; font-weight: 700; margin: 0;" data-i18n-dynamic="true">{{ day }}</h3>
+                <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 0;">{{ timetable_by_day[day]|length }} class{{ 'es' if timetable_by_day[day]|length != 1 else '' }}</p>
+            </div>
+        </div>
+        <span style="background: rgba(255,255,255,0.2); color: white; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600;">{{ day[:3].upper() }}</span>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+        {% for item in timetable_by_day[day] %}
+        <div style="display: flex; align-items: center; padding: 18px 24px; border-bottom: 1px solid var(--border); gap: 20px; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+            <!-- Time block -->
+            <div style="min-width: 90px; text-align: center; background: var(--primary-light); border-radius: 10px; padding: 10px 8px;">
+                <div style="font-size: 15px; font-weight: 700; color: var(--primary-dark);">{{ item.entry.time_start }}</div>
+                <div style="font-size: 10px; color: var(--muted); margin: 2px 0;">to</div>
+                <div style="font-size: 15px; font-weight: 700; color: var(--primary-dark);">{{ item.entry.time_end }}</div>
+            </div>
+            <!-- Color dot -->
+            <div style="width: 4px; height: 60px; border-radius: 4px; background: {{ item.course.color }};"></div>
+            <!-- Course info -->
+            <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+                    <span style="background: {{ item.course.color }}20; color: {{ item.course.color }}; border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;">{{ item.course.code }}</span>
+                    {% if item.course.is_lab %}
+                    <span class="badge badge-warning" style="font-size: 11px;"><i class="fa-solid fa-flask"></i> Lab</span>
+                    {% endif %}
+                </div>
+                <div style="font-weight: 600; font-size: 15px; color: var(--text); margin-bottom: 4px;" data-i18n-dynamic="true">{{ item.course.name }}</div>
+                <div style="color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <span><i class="fa-solid fa-chalkboard-user" style="color: var(--primary);"></i> {{ item.teacher.full_name }}</span>
+                    <span><i class="fa-solid fa-door-open" style="color: var(--primary);"></i> {{ item.room.name }}</span>
+                    <span><i class="fa-solid fa-users" style="color: var(--primary);"></i> {{ item.group.name }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+{% endblock %}

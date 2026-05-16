@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Grades - Smart Timetable System{% endblock %}
+{% block page_title %}<span data-i18n="nav_grades">My Grades</span>{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-graduation-cap text-primary"></i> <span data-i18n="academic_perf">Academic Performance Overview</span></h3>
+    </div>
+    <div class="panel-body">
+        {% if session_role == 'student' %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="course">Course</th>
+                            <th data-i18n="instructor">Instructor</th>
+                            <th data-i18n="credits">Credits</th>
+                            <th data-i18n="attendance">Attendance</th>
+                            <th data-i18n="grade">Grade</th>
+                            <th data-i18n="status">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in grade_data %}
+                        <tr>
+                            <td>
+                                <strong>{{ item.course.code }}</strong>
+                                <br>
+                                <span class="text-muted" style="font-size: 12px;" data-i18n-dynamic="true">{{ item.course.name }}</span>
+                            </td>
+                            <td data-i18n-dynamic="true">{{ item.teacher.full_name if item.teacher else 'N/A' }}</td>
+                            <td>{{ item.course.credits }}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; width: 60px;">
+                                        <div style="height: 100%; width: {{ item.enrollment.attendance }}%; background: {% if item.enrollment.attendance > 75 %}var(--success){% else %}var(--danger){% endif %};"></div>
+                                    </div>
+                                    <span style="font-size: 12px; font-weight: 500;">{{ item.enrollment.attendance }}%</span>
+                                </div>
+                            </td>
+                            <td style="font-weight: 600; font-size: 16px;">
+                                {% if item.enrollment.grade %}
+                                    {{ item.enrollment.grade }}
+                                {% else %}
+                                    <span class="text-muted" style="font-size: 13px; font-weight: normal;" data-i18n="pending">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.enrollment.grade %}
+                                    {% if item.enrollment.grade >= 60 %}
+                                        <span class="badge badge-success" data-i18n="passed">Passed</span>
+                                    {% else %}
+                                        <span class="badge badge-danger" data-i18n="failed">Failed</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge badge-warning" data-i18n="in_progress">In Progress</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not grade_data %}
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 30px; color: var(--muted);" data-i18n="no_grade_data">No grade data available.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div style="text-align: center; padding: 40px; color: var(--muted);">
+                <i class="fa-solid fa-lock" style="font-size: 48px; margin-bottom: 16px; color: var(--border);"></i>
+                <p>This view is configured for students. Check the Grade Management portal instead.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

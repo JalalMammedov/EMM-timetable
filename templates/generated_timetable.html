@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Generated Timetable - Smart Timetable System{% endblock %}
+{% block page_title %}Full Generated Timetable{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="panel-title"><i class="fa-solid fa-table text-primary"></i> Complete Master Timetable</h3>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="badge {% if conflict_count > 0 %}badge-danger{% else %}badge-success{% endif %}">
+                <i class="fa-solid {% if conflict_count > 0 %}fa-triangle-exclamation{% else %}fa-check{% endif %}"></i>
+                {{ conflict_count }} Conflicts
+            </span>
+            <span class="badge badge-primary">{{ entries|length }} Total Classes</span>
+            {% if entries %}
+            <form action="{{ url_for('publish_timetable') }}" method="POST" style="margin: 0;">
+                <button type="submit" class="btn {% if is_published %}btn-danger-outline{% else %}btn-primary{% endif %} btn-sm">
+                    <i class="fa-solid {% if is_published %}fa-eye-slash{% else %}fa-eye{% endif %}"></i> 
+                    {% if is_published %}Unpublish{% else %}Publish{% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <div class="panel-body">
+        {% if entries %}
+        <div class="table-responsive">
+            <table class="table" id="full-timetable">
+                <thead>
+                    <tr>
+                        <th>Day</th>
+                        <th>Time</th>
+                        <th>Course</th>
+                        <th>Teacher</th>
+                        <th>Room</th>
+                        <th>Group</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in entries %}
+                    <tr>
+                        <td><span class="badge badge-primary">{{ item.entry.day }}</span></td>
+                        <td style="font-weight: 500;">{{ item.entry.time_start }} - {{ item.entry.time_end }}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ item.course.color }};"></div>
+                                <strong>{{ item.course.code }}</strong> {{ item.course.name }}
+                            </div>
+                        </td>
+                        <td>{{ item.teacher.full_name }}</td>
+                        <td>
+                            {% if item.course.is_lab %}
+                                <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> {{ item.room.name }}</span>
+                            {% else %}
+                                {{ item.room.name }}
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-info">{{ item.group.name }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 60px; color: var(--muted);">
+            <i class="fa-solid fa-calendar-xmark" style="font-size: 48px; margin-bottom: 16px; color: var(--border);"></i>
+            <p>No timetable entries exist. Please use the Smart Timetable Builder to generate a new schedule.</p>
+            <a href="{{ url_for('timetable_builder') }}" class="btn btn-primary" style="margin-top: 16px;">Go to Builder</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

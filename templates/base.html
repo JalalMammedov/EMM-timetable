@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Smart Timetable System{% endblock %}</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="logo-icon">ST</div>
+                <span data-i18n="karabakh_uni">EMM</span>
+            </div>
+            
+            <ul class="sidebar-menu">
+                {% if session_role == 'student' %}
+                    <li><a href="{{ url_for('student_dashboard') }}" class="{% if request.endpoint == 'student_dashboard' %}active{% endif %}"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav_dashboard">Dashboard</span></a></li>
+                    <li><a href="{{ url_for('student_timetable') }}" class="{% if request.endpoint == 'student_timetable' %}active{% endif %}"><i class="fa-solid fa-calendar-week"></i> <span data-i18n="my_timetable">My Timetable</span></a></li>
+                    <li><a href="{{ url_for('courses') }}" class="{% if request.endpoint == 'courses' %}active{% endif %}"><i class="fa-solid fa-book"></i> <span data-i18n="nav_courses">Courses</span></a></li>
+                    <li><a href="{{ url_for('grades') }}" class="{% if request.endpoint == 'grades' %}active{% endif %}"><i class="fa-solid fa-graduation-cap"></i> <span data-i18n="nav_grades">Grades</span></a></li>
+                    <li><a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}"><i class="fa-solid fa-user"></i> <span data-i18n="nav_profile">Profile</span></a></li>
+                {% elif session_role == 'teacher' %}
+                    <li><a href="{{ url_for('teacher_dashboard') }}" class="{% if request.endpoint == 'teacher_dashboard' %}active{% endif %}"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav_dashboard">Dashboard</span></a></li>
+                    <li><a href="{{ url_for('teacher_timetable') }}" class="{% if request.endpoint == 'teacher_timetable' %}active{% endif %}"><i class="fa-solid fa-calendar-week"></i> <span>My Schedule</span></a></li>
+                    <li><a href="{{ url_for('courses') }}" class="{% if request.endpoint == 'courses' %}active{% endif %}"><i class="fa-solid fa-chalkboard-user"></i> <span data-i18n="nav_my_classes">My Classes</span></a></li>
+                    <li><a href="{{ url_for('grades') }}" class="{% if request.endpoint == 'grades' %}active{% endif %}"><i class="fa-solid fa-clipboard-list"></i> <span data-i18n="nav_grade_management">Grade Management</span></a></li>
+                    <li><a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}"><i class="fa-solid fa-user"></i> <span data-i18n="nav_profile">Profile</span></a></li>
+                {% elif session_role == 'admin' %}
+                    <li><a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fa-solid fa-gauge"></i> <span data-i18n="nav_admin_dashboard">Admin Dashboard</span></a></li>
+                    <li><a href="{{ url_for('timetable_builder') }}" class="{% if request.endpoint == 'timetable_builder' %}active{% endif %}"><i class="fa-solid fa-calendar-plus"></i> <span data-i18n="nav_smart_timetable">Smart Timetable</span></a></li>
+                    <li><a href="{{ url_for('admin_students') }}" class="{% if request.endpoint == 'admin_students' %}active{% endif %}"><i class="fa-solid fa-user-graduate"></i> <span data-i18n="nav_students">Students</span></a></li>
+                    <li><a href="{{ url_for('admin_teachers') }}" class="{% if request.endpoint == 'admin_teachers' %}active{% endif %}"><i class="fa-solid fa-chalkboard-teacher"></i> <span data-i18n="nav_teachers">Teachers</span></a></li>
+                    <li><a href="{{ url_for('admin_courses') }}" class="{% if request.endpoint == 'admin_courses' %}active{% endif %}"><i class="fa-solid fa-book-open"></i> <span data-i18n="nav_courses">Courses</span></a></li>
+                    <li><a href="{{ url_for('admin_rooms') }}" class="{% if request.endpoint == 'admin_rooms' %}active{% endif %}"><i class="fa-solid fa-door-open"></i> <span data-i18n="nav_rooms">Rooms</span></a></li>
+                    <li><a href="{{ url_for('admin_groups') }}" class="{% if request.endpoint == 'admin_groups' %}active{% endif %}"><i class="fa-solid fa-users"></i> <span data-i18n="nav_groups">Groups</span></a></li>
+                    <li><a href="{{ url_for('admin_generated_timetable') }}" class="{% if request.endpoint == 'admin_generated_timetable' %}active{% endif %}"><i class="fa-solid fa-table"></i> <span data-i18n="nav_generated_timetable">Generated Timetable</span></a></li>
+                    <li><a href="{{ url_for('admin_settings') }}" class="{% if request.endpoint == 'admin_settings' %}active{% endif %}"><i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Settings</span></a></li>
+                {% endif %}
+            </ul>
+            
+            <div class="sidebar-footer">
+                <p>&copy; {{ current_year }} Smart Timetable</p>
+                <p data-i18n="footer_text">EMM VSA</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Topbar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <i class="fa-solid fa-bars mobile-toggle" id="mobile-toggle"></i>
+                    <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                </div>
+                
+                <div class="topbar-right">
+                    <button id="langToggle" class="btn btn-outline" style="padding: 6px 12px; margin-right: 8px;">
+                        <span style="font-weight: 600;">AZ</span>
+                    </button>
+                    <div class="uni-badge" data-i18n-dynamic="true">
+                        <i class="fa-solid fa-building-columns"></i> {{ session_uni }}
+                    </div>
+                    
+                    <div class="user-profile-menu">
+                        <div class="user-info" style="text-align: right;">
+                            <span class="user-name" data-i18n-dynamic="true">{{ session_name }}</span>
+                            <span class="user-role" data-i18n-dynamic="true">{{ session_role }}</span>
+                        </div>
+                        <div class="avatar">{{ session_avatar }}</div>
+                    </div>
+                    
+                    <a href="{{ url_for('logout') }}" class="logout-btn">
+                        <i class="fa-solid fa-arrow-right-from-bracket"></i> <span data-i18n="logout">Logout</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="content-area">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-container">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">
+                                    {% if category == 'error' %}
+                                        <i class="fa-solid fa-circle-exclamation"></i>
+                                    {% else %}
+                                        <i class="fa-solid fa-check-circle"></i>
+                                    {% endif %}
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile - Smart Timetable System{% endblock %}
+{% block page_title %}<span data-i18n="nav_profile">My Profile</span>{% endblock %}
+
+{% block content %}
+<div class="builder-layout">
+    <div style="width: 350px;">
+        <div class="panel">
+            <div class="panel-body" style="text-align: center; padding: 40px 24px;">
+                <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold; margin: 0 auto 20px;">
+                    {{ user.avatar_initials }}
+                </div>
+                <h3 style="font-size: 20px; margin-bottom: 4px;">{{ user.full_name }}</h3>
+                <p class="text-muted" style="text-transform: capitalize; margin-bottom: 16px;"><span data-i18n-dynamic="true">{{ user.role }}</span> <span data-i18n="account">Account</span></p>
+                
+                <span class="badge badge-success"><i class="fa-solid fa-check"></i> <span data-i18n="active_status">Active</span></span>
+            </div>
+        </div>
+    </div>
+    
+    <div style="flex: 1;">
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fa-solid fa-address-card text-primary"></i> <span data-i18n="personal_info">Personal Information</span></h3>
+            </div>
+            <div class="panel-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <div class="form-group">
+                        <label class="form-label text-muted" data-i18n="full_name">Full Name</label>
+                        <div style="font-size: 16px; font-weight: 500;" data-i18n-dynamic="true">{{ user.full_name }}</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-muted" data-i18n="email_addr">Email Address</label>
+                        <div style="font-size: 16px; font-weight: 500;">{{ user.email }}</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-muted" data-i18n="university">University</label>
+                        <div style="font-size: 16px; font-weight: 500;" data-i18n-dynamic="true">{{ university.name if university else 'N/A' }}</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-muted" data-i18n="department">Department</label>
+                        <div style="font-size: 16px; font-weight: 500;" data-i18n-dynamic="true">{{ user.department or 'N/A' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fa-solid fa-shield-halved text-primary"></i> <span data-i18n="security">Security</span></h3>
+            </div>
+            <div class="panel-body">
+                <p class="text-muted" style="margin-bottom: 20px;" data-i18n="security_desc">Manage your password and security settings.</p>
+                <button id="show-password-form" class="btn btn-outline" onclick="document.getElementById('password-form-container').style.display='block'; this.style.display='none';"><i class="fa-solid fa-key"></i> <span data-i18n="change_password">Change Password</span></button>
+                
+                <div id="password-form-container" style="display: none; margin-top: 15px;">
+                    <form action="{{ url_for('change_password') }}" method="POST">
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label class="form-label" data-i18n="current_password">Current Password</label>
+                            <input type="password" name="current_password" class="form-control" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 12px;">
+                            <label class="form-label" data-i18n="new_password">New Password</label>
+                            <input type="password" name="new_password" class="form-control" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 16px;">
+                            <label class="form-label" data-i18n="confirm_new_password">Confirm New Password</label>
+                            <input type="password" name="confirm_new_password" class="form-control" required>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="submit" class="btn btn-primary" data-i18n="save_changes">Save Changes</button>
+                            <button type="button" class="btn btn-outline" onclick="document.getElementById('password-form-container').style.display='none'; document.getElementById('show-password-form').style.display='inline-block';" data-i18n="cancel">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

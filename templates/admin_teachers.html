@@ -8,8 +8,19 @@
         <h3 class="panel-title"><i class="fa-solid fa-chalkboard-teacher text-primary"></i> <span data-i18n="faculty_members">Faculty Members</span></h3>
     </div>
     <div class="panel-body">
+        <div class="admin-filter-bar">
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="teachers" data-admin-filter-field="name" type="search" placeholder="Filter by teacher name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Department</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="teachers" data-admin-filter-field="department" type="search" placeholder="Filter by department">
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table">
+            <table class="table admin-table">
                 <thead>
                     <tr>
                         <th data-i18n="avatar">Avatar</th>
@@ -17,32 +28,69 @@
                         <th data-i18n="email">Email</th>
                         <th data-i18n="department">Department</th>
                         <th data-i18n="assigned_courses">Assigned Courses</th>
-                        <th data-i18n="actions">Actions</th>
+                        <th>Students</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for t in teachers %}
-                    <tr>
-                        <td>
-                            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-dark); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
-                                {{ t.avatar_initials }}
-                            </div>
-                        </td>
+                    {% for row in teacher_rows %}
+                    {% set t = row.teacher %}
+                    <tr class="admin-data-row admin-click-row" data-filter-scope="teachers" data-name="{{ t.full_name|lower }}" data-department="{{ (t.department or '')|lower }}" data-detail-target="teacher-detail-{{ t.id }}">
+                        <td><div class="admin-avatar admin-avatar-dark">{{ t.avatar_initials }}</div></td>
                         <td><strong>{{ t.full_name }}</strong></td>
                         <td class="text-muted">{{ t.email }}</td>
                         <td data-i18n-dynamic="true">{{ t.department or 'N/A' }}</td>
-                        <td>
-                            {% set count = namespace(value=0) %}
-                            {% for c in courses %}
-                                {% if c.teacher_id == t.id %}
-                                    {% set count.value = count.value + 1 %}
-                                {% endif %}
-                            {% endfor %}
-                            <span class="badge badge-info">{{ count.value }} Courses</span>
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        <td><span class="badge badge-info">{{ row.courses|length }} Courses</span></td>
+                        <td><span class="badge badge-primary">{{ row.student_count }} Students</span></td>
+                    </tr>
+                    <tr class="admin-detail-row" id="teacher-detail-{{ t.id }}" hidden>
+                        <td colspan="6">
+                            <div class="admin-detail-card">
+                                <div class="admin-detail-grid">
+                                    <div>
+                                        <span class="admin-detail-label">Full Name</span>
+                                        <strong>{{ t.full_name }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Gmail</span>
+                                        <strong>{{ t.email }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Department</span>
+                                        <strong>{{ t.department or 'N/A' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Assigned Subjects</span>
+                                        <strong>{{ row.courses|length }}</strong>
+                                    </div>
+                                </div>
+                                <div class="admin-detail-section">
+                                    <h4>Subjects</h4>
+                                    {% if row.courses %}
+                                    <div class="admin-chip-list">
+                                        {% for course in row.courses %}
+                                        <span class="admin-chip">{{ course.code }} - {{ course.name }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">No assigned subjects found.</p>
+                                    {% endif %}
+                                </div>
+                                <div class="admin-detail-section">
+                                    <h4>Teaching Schedule</h4>
+                                    {% if row.schedule %}
+                                    <div class="admin-mini-list">
+                                        {% for item in row.schedule %}
+                                        <div>
+                                            <strong>{{ item.entry.day }} {{ item.entry.time_start }} - {{ item.entry.time_end }}</strong>
+                                            <span>{{ item.course.code if item.course else 'Course' }} / {{ item.group.name if item.group else 'Group' }} / {{ item.room.name if item.room else 'Room' }}</span>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">No scheduled classes found.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

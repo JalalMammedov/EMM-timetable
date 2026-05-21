@@ -1,4 +1,6 @@
-import os, random, json, io, math, uuid
+import os, random, json, io, math, uuid, re, secrets, hashlib, smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -124,6 +126,38 @@ class CourseMaterial(db.Model):
     file_url = db.Column(db.String(500))  # URL or file path
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class ExtraLessonRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    course_id = db.Column(db.Integer, db.ForeignKey("course.id"), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey("room.id"), nullable=False)
+    lesson_date = db.Column(db.Date, nullable=False)
+    day = db.Column(db.String(20), nullable=False)
+    start_time = db.Column(db.String(10), nullable=False)
+    end_time = db.Column(db.String(10), nullable=False)
+    message = db.Column(db.String(500))
+    status = db.Column(db.String(20), default="notified")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Announcement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(500), nullable=False)
+    announcement_type = db.Column(db.String(20), default="info")
+    audience = db.Column(db.String(20), default="all")
+    source_type = db.Column(db.String(50))
+    source_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PasswordResetToken(db.Model):
+    """Stores SHA-256 hashes of single-use password-reset tokens."""
+    __tablename__ = "password_reset_token"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    token_hash = db.Column(db.String(255), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
 def get_publish_status():
     settings = SystemSettings.query.first()
     if not settings:
@@ -131,6 +165,17 @@ def get_publish_status():
         db.session.add(settings)
         db.session.commit()
     return settings.is_timetable_published
+
+def get_form_redirect_target(default_endpoint):
+    next_url = (request.form.get("next") or "").strip()
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return url_for(default_endpoint)
+
+def clear_generated_timetable():
+    GeneratedTimetable.query.delete()
+    settings = get_or_create_settings()
+    settings.is_timetable_published = False
 
 def migrate_db():
     """Safely add new columns to existing SQLite DB without breaking data."""
@@ -141,6 +186,22 @@ def migrate_db():
             conn.commit()
         except Exception:
             pass  # Column already exists
+
+        # ── password_reset_token table ──────────────────────────────────────
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS password_reset_token (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL REFERENCES user(id),
+                    token_hash VARCHAR(255) NOT NULL UNIQUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    expires_at DATETIME NOT NULL,
+                    used_at DATETIME
+                )
+            """))
+            conn.commit()
+        except Exception:
+            pass
         # Create CourseMaterial table if not exists
         try:
             conn.execute(text("""
@@ -159,7 +220,42 @@ def migrate_db():
         except Exception:
             pass
 
-# ─────────────── SEED ───────────────
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS extra_lesson_request (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    teacher_id INTEGER NOT NULL REFERENCES user(id),
+                    course_id INTEGER NOT NULL REFERENCES course(id),
+                    room_id INTEGER NOT NULL REFERENCES room(id),
+                    lesson_date DATE NOT NULL,
+                    day VARCHAR(20) NOT NULL,
+                    start_time VARCHAR(10) NOT NULL,
+                    end_time VARCHAR(10) NOT NULL,
+                    message VARCHAR(500),
+                    status VARCHAR(20) DEFAULT 'notified',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS announcement (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title VARCHAR(500) NOT NULL,
+                    announcement_type VARCHAR(20) DEFAULT 'info',
+                    audience VARCHAR(20) DEFAULT 'all',
+                    source_type VARCHAR(50),
+                    source_id INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+        except Exception:
+            pass
+
+# SEED
 def seed_database():
     if University.query.first():
         return
@@ -239,6 +335,126 @@ def seed_database():
 
     db.session.commit()
 
+# ─────────────── PASSWORD-RESET HELPERS ───────────────
+
+def _hash_reset_token(raw_token: str) -> str:
+    """Return the SHA-256 hex-digest of a raw token string."""
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+def _generate_reset_token(user) -> str:
+    """
+    Create a secure single-use token for *user*, persist its hash to the DB,
+    and return the raw (un-hashed) token to be embedded in the reset URL.
+    """
+    from datetime import timedelta
+    # Invalidate any outstanding unused tokens for this user
+    PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).delete()
+    raw_token = secrets.token_urlsafe(32)
+    token_row = PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_reset_token(raw_token),
+        expires_at=datetime.utcnow() + timedelta(hours=1),
+    )
+    db.session.add(token_row)
+    db.session.commit()
+    return raw_token
+
+
+def _get_valid_reset_token(raw_token: str):
+    """
+    Look up the hashed token; return the PasswordResetToken row if it is
+    valid (exists, not expired, not used), else return None.
+    """
+    token_hash = _hash_reset_token(raw_token)
+    row = PasswordResetToken.query.filter_by(token_hash=token_hash).first()
+    if row is None:
+        return None
+    if row.used_at is not None:
+        return None
+    if datetime.utcnow() > row.expires_at:
+        return None
+    return row
+
+
+def _send_password_reset_email(user, reset_url: str):
+    """
+    Send a password-reset email via SMTP.
+    If SMTP is not configured, print the reset link to the console instead
+    of crashing so developers can still test locally.
+    """
+    mail_server = os.environ.get("MAIL_SERVER", "")
+    mail_port = int(os.environ.get("MAIL_PORT", 587))
+    mail_use_tls = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
+    mail_username = os.environ.get("MAIL_USERNAME", "")
+    mail_password = os.environ.get("MAIL_PASSWORD", "")
+    mail_sender = os.environ.get("MAIL_DEFAULT_SENDER", mail_username)
+
+    # --- Build the message -------------------------------------------------
+    name = user.full_name or "User"
+    subject = "Password Reset Request – Smart Timetable System"
+    html_body = f"""
+    <html><body style="font-family:Arial,sans-serif;color:#222;">
+      <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
+        <h2 style="color:#0f8f5f;">Smart Timetable System</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>We received a request to reset your password.
+           Click the button below to set a new password:</p>
+        <p style="margin:28px 0;">
+          <a href="{reset_url}"
+             style="background:#0f8f5f;color:#fff;padding:12px 28px;
+                    border-radius:6px;text-decoration:none;font-weight:600;">
+            Reset Password
+          </a>
+        </p>
+        <p style="font-size:13px;color:#666;">
+          Or copy this link into your browser:<br>
+          <a href="{reset_url}" style="color:#0f8f5f;">{reset_url}</a>
+        </p>
+        <p style="font-size:13px;color:#666;">
+          This link will expire in <strong>1 hour</strong>.<br>
+          If you did not request a password reset, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #eee;margin-top:32px;">
+        <p style="font-size:11px;color:#aaa;">Smart Timetable System – EMM</p>
+      </div>
+    </body></html>
+    """
+    plain_body = (
+        f"Hello {name},\n\n"
+        "We received a request to reset your password.\n"
+        "Open the link below to set a new password:\n\n"
+        f"{reset_url}\n\n"
+        "This link will expire in 1 hour.\n"
+        "If you did not request this, you can ignore this email."
+    )
+
+    # --- Send or fall back to console print --------------------------------
+    if not mail_server or not mail_username or not mail_password:
+        print("\n" + "=" * 60)
+        print("[DEV] SMTP not configured – password reset link:")
+        print(reset_url)
+        print("=" * 60 + "\n")
+        return
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = mail_sender
+        msg["To"] = user.email
+        msg.attach(MIMEText(plain_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(mail_server, mail_port, timeout=15) as smtp:
+            if mail_use_tls:
+                smtp.starttls()
+            smtp.login(mail_username, mail_password)
+            smtp.sendmail(mail_sender, user.email, msg.as_string())
+    except Exception as exc:
+        print(f"[WARN] Failed to send reset email: {exc}")
+        print(f"[DEV] Reset link: {reset_url}")
+
+
 # ─────────────── AUTH DECORATORS ───────────────
 def login_required(f):
     @wraps(f)
@@ -295,6 +511,81 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+# ── FORGOT / RESET PASSWORD ──────────────────────────────────────────────────
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Step 1: user enters their email to request a reset link."""
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user = User.query.filter_by(email=email).first()
+        if user:
+            raw_token = _generate_reset_token(user)
+            base_url = os.environ.get("BASE_URL", "").rstrip("/")
+            if not base_url:
+                base_url = request.host_url.rstrip("/")
+            reset_url = f"{base_url}/reset-password/{raw_token}"
+            _send_password_reset_email(user, reset_url)
+        # Always show the same message – never reveal whether the email exists
+        flash(
+            "If an account with that email exists, a password reset link has been sent.",
+            "success",
+        )
+        return redirect(url_for("login"))
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    """Step 2: user opens the link and sets a new password."""
+    token_row = _get_valid_reset_token(token)
+    if token_row is None:
+        flash(
+            "This password reset link is invalid, has expired, or has already been used. "
+            "Please request a new one.",
+            "error",
+        )
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        # Re-validate in the POST path too (prevents replay after tab sits open)
+        token_row = _get_valid_reset_token(token)
+        if token_row is None:
+            flash(
+                "This link is no longer valid. Please request a new reset link.",
+                "error",
+            )
+            return redirect(url_for("forgot_password"))
+
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if new_password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if len(new_password) < 8 or not re.search(r"[A-Z]", new_password):
+            flash(
+                "Password must be at least 8 characters and include at least 1 uppercase letter.",
+                "error",
+            )
+            return render_template("reset_password.html", token=token)
+
+        user = User.query.get(token_row.user_id)
+        if user is None:
+            flash("User not found. Please contact support.", "error")
+            return redirect(url_for("login"))
+
+        # Update password and mark token as used
+        user.password_hash = generate_password_hash(new_password)
+        token_row.used_at = datetime.utcnow()
+        db.session.commit()
+
+        flash("Your password has been updated. Please log in with your new password.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
+
 # ── STUDENT ──
 @app.route("/student/dashboard")
 @role_required("student")
@@ -324,7 +615,7 @@ def student_dashboard():
         schedule = []
 
     entries = build_timetable_context(schedule)
-    announcements = [
+    announcements = build_recent_announcements("student") + [
         {"title": "Midterm Exam Schedule Released", "date": "May 15, 2026", "type": "important"},
         {"title": "Lab sessions moved to Lab-2 this week", "date": "May 12, 2026", "type": "info"},
         {"title": "Registration deadline: May 20", "date": "May 11, 2026", "type": "warning"},
@@ -400,21 +691,68 @@ def teacher_dashboard():
 @role_required("teacher")
 def teacher_timetable():
     user = User.query.get(session["user_id"])
-    is_published = get_publish_status()
-    if is_published:
-        schedule = ScheduleEntry.query.filter_by(teacher_id=user.id).order_by(ScheduleEntry.day, ScheduleEntry.time_start).all()
-    else:
-        schedule = []
-    entries = build_timetable_context(schedule)
-    days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    timetable_by_day = {day: [] for day in days_order}
-    for item in entries:
-        day = item["entry"].day
-        if day in timetable_by_day:
-            timetable_by_day[day].append(item)
-    return render_template("teacher_timetable.html", user=user,
-                           timetable_by_day=timetable_by_day, days_order=days_order,
-                           is_published=is_published, total=len(entries))
+    return render_template("teacher_timetable.html", **build_teacher_timetable_context(user))
+
+@app.route("/teacher/extra-lesson", methods=["POST"])
+@role_required("teacher")
+def teacher_extra_lesson():
+    user = User.query.get(session["user_id"])
+    action = request.form.get("action", "check")
+    require_room = action == "request"
+    form_data, errors = parse_extra_lesson_form(user, require_room=require_room)
+
+    if errors:
+        for error in errors:
+            flash(error, "error")
+        return render_template("teacher_timetable.html", **build_teacher_timetable_context(user, extra_lesson_form=form_data))
+
+    if teacher_has_slot_conflict(user, form_data["day"], form_data["lesson_date"], form_data["start_min"], form_data["end_min"]):
+        flash("You already have a teaching session during that time.", "error")
+        return render_template("teacher_timetable.html", **build_teacher_timetable_context(user, extra_lesson_form=form_data))
+
+    available_rooms = find_available_extra_lesson_rooms(
+        form_data["course"],
+        form_data["day"],
+        form_data["lesson_date"],
+        form_data["start_min"],
+        form_data["end_min"],
+    )
+
+    if action == "check":
+        if not available_rooms:
+            flash("No rooms are available for that date and time.", "error")
+        return render_template("teacher_timetable.html", **build_teacher_timetable_context(
+            user,
+            extra_lesson_form=form_data,
+            available_rooms=available_rooms,
+        ))
+
+    selected_room = Room.query.get(form_data["room_id"])
+    if not selected_room or selected_room.id not in {room["id"] for room in available_rooms}:
+        flash("That room is no longer available for the selected time.", "error")
+        return render_template("teacher_timetable.html", **build_teacher_timetable_context(
+            user,
+            extra_lesson_form=form_data,
+            available_rooms=available_rooms,
+        ))
+
+    request_row = ExtraLessonRequest(
+        teacher_id=user.id,
+        course_id=form_data["course"].id,
+        room_id=selected_room.id,
+        lesson_date=form_data["lesson_date"],
+        day=form_data["day"],
+        start_time=form_data["start_time"],
+        end_time=form_data["end_time"],
+        message=form_data["message"],
+        status="notified",
+    )
+    db.session.add(request_row)
+    db.session.flush()
+    db.session.add(build_extra_lesson_announcement(request_row))
+    db.session.commit()
+    flash(f"Admin has been notified that you will teach in room {selected_room.name}.", "success")
+    return redirect(url_for("teacher_timetable"))
 
 # ── ADMIN ──
 @app.route("/admin/dashboard")
@@ -429,24 +767,36 @@ def admin_dashboard():
         "groups": Group.query.count(),
         "schedule_entries": ScheduleEntry.query.count(),
     }
-    recent_schedule = ScheduleEntry.query.order_by(ScheduleEntry.generated_at.desc()).limit(10).all()
-    recent_entries = build_timetable_context(recent_schedule)
     all_students = User.query.filter_by(role="student").all()
     all_teachers = User.query.filter_by(role="teacher").all()
     all_courses = Course.query.all()
+    announcements = build_recent_announcements("admin")
+    extra_lesson_rows = build_extra_lesson_request_rows(
+        ExtraLessonRequest.query.order_by(ExtraLessonRequest.created_at.desc()).limit(10).all()
+    )
     return render_template("admin_dashboard.html", user=user, stats=stats,
-                           recent_entries=recent_entries,
                            all_students=all_students, all_teachers=all_teachers,
-                           all_courses=all_courses)
+                           all_courses=all_courses,
+                           announcements=announcements,
+                           extra_lesson_rows=extra_lesson_rows)
 
 @app.route("/admin/timetable")
 @role_required("admin")
 def timetable_builder():
     user = User.query.get(session["user_id"])
     last_upload = UploadedTimetableFile.query.filter_by(uploaded_by=user.id).order_by(UploadedTimetableFile.uploaded_at.desc()).first()
-    last_results = GeneratedTimetable.query.order_by(GeneratedTimetable.created_at.desc()).limit(200).all()
+    latest_generated_message = None
+    last_results = []
+    if last_upload:
+        if last_upload.analysis_status == "generated":
+            last_results = GeneratedTimetable.query.order_by(GeneratedTimetable.created_at.desc()).limit(200).all()
+        elif last_upload.analysis_status in ["uploaded", "analyzed", "issues"]:
+            latest_generated_message = "No timetable has been generated for the latest uploaded file yet."
+    else:
+        last_results = GeneratedTimetable.query.order_by(GeneratedTimetable.created_at.desc()).limit(200).all()
     return render_template("timetable_builder.html", user=user,
                            last_upload=last_upload, last_results=last_results,
+                           latest_generated_message=latest_generated_message,
                            excel_available=EXCEL_AVAILABLE)
 
 @app.route("/admin/generate-timetable", methods=["POST"])
@@ -458,7 +808,7 @@ def generate_timetable():
     start_h = int(data.get("start_hour", 8))
     end_h = int(data.get("end_hour", 18))
 
-    ScheduleEntry.query.delete()
+    GeneratedTimetable.query.delete()
     db.session.commit()
 
     courses = Course.query.all()
@@ -508,11 +858,18 @@ def generate_timetable():
                 available_rooms = [r for r in pool if r.id not in slot_used[key]["rooms"]]
                 if not available_rooms:
                     continue
-                room = available_rooms[0]
-                entry = ScheduleEntry(
-                    course_id=course.id, teacher_id=tid,
-                    room_id=room.id, group_id=group.id,
-                    day=day, time_start=ts, time_end=te, semester=semester
+                t_obj = User.query.get(tid) if tid else None
+                entry = GeneratedTimetable(
+                    course_id=course.code,
+                    course_name=course.name,
+                    teacher_name=t_obj.full_name if t_obj else "Unassigned Teacher",
+                    room_name=room.name,
+                    group_name=group.name,
+                    day=day,
+                    start_time=ts,
+                    end_time=te,
+                    course_type="lab" if course.is_lab else "lecture",
+                    status="scheduled"
                 )
                 db.session.add(entry)
                 slot_used[key]["teachers"].add(tid)
@@ -525,21 +882,21 @@ def generate_timetable():
             if assigned:
                 break
 
+    settings = get_or_create_settings()
+    settings.is_timetable_published = False
     db.session.commit()
-    schedule = ScheduleEntry.query.all()
-    conflicts = detect_conflicts(schedule)
+
+    generated = GeneratedTimetable.query.all()
+    # Conflicts calculation is mock for this mock generation endpoint
+    conflicts = []
     result = []
-    for e in schedule:
-        c = Course.query.get(e.course_id)
-        t = User.query.get(e.teacher_id)
-        r = Room.query.get(e.room_id)
-        g = Group.query.get(e.group_id)
+    for e in generated:
         result.append({
-            "id": e.id, "course": c.name if c else "", "code": c.code if c else "",
-            "teacher": t.full_name if t else "", "room": r.name if r else "",
-            "group": g.name if g else "", "day": e.day,
-            "time_start": e.time_start, "time_end": e.time_end,
-            "is_lab": c.is_lab if c else False, "color": c.color if c else "#0f8f5f"
+            "id": e.id, "course": e.course_name, "code": e.course_id,
+            "teacher": e.teacher_name, "room": e.room_name,
+            "group": e.group_name, "day": e.day,
+            "time_start": e.start_time, "time_end": e.end_time,
+            "is_lab": e.course_type == "lab", "color": "#7c3aed" if e.course_type == "lab" else "#0f8f5f"
         })
     return jsonify({"success": True, "entries": result,
                     "count": len(result), "conflicts": len(conflicts),
@@ -718,20 +1075,20 @@ def profile():
 @login_required
 def change_password():
     user = User.query.get(session["user_id"])
-    current_password = request.form.get("current_password")
-    new_password = request.form.get("new_password")
-    confirm_new_password = request.form.get("confirm_new_password")
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_new_password = request.form.get("confirm_new_password", "")
     
     if not check_password_hash(user.password_hash, current_password):
-        flash("Current password is incorrect.", "danger")
+        flash("Current password is incorrect.", "error")
         return redirect(url_for("profile"))
         
     if new_password != confirm_new_password:
-        flash("New passwords do not match.", "danger")
+        flash("New passwords do not match.", "error")
         return redirect(url_for("profile"))
         
-    if len(new_password) < 6:
-        flash("New password must be at least 6 characters long.", "danger")
+    if len(new_password) < 8 or not re.search(r"[A-Z]", new_password):
+        flash("New password must be at least 8 characters long and include at least 1 capital letter.", "error")
         return redirect(url_for("profile"))
         
     user.password_hash = generate_password_hash(new_password)
@@ -743,58 +1100,131 @@ def change_password():
 @role_required("admin")
 def admin_students():
     user = User.query.get(session["user_id"])
-    students = User.query.filter_by(role="student").all()
-    return render_template("admin_students.html", user=user, students=students)
+    students = User.query.filter_by(role="student").order_by(User.full_name).all()
+    student_rows = build_admin_student_rows(students)
+    return render_template("admin_students.html", user=user, student_rows=student_rows)
 
 @app.route("/admin/teachers")
 @role_required("admin")
 def admin_teachers():
     user = User.query.get(session["user_id"])
-    teachers = User.query.filter_by(role="teacher").all()
-    courses = Course.query.all()
-    return render_template("admin_teachers.html", user=user, teachers=teachers, courses=courses)
+    teachers = User.query.filter_by(role="teacher").order_by(User.full_name).all()
+    teacher_rows = build_admin_teacher_rows(teachers)
+    return render_template("admin_teachers.html", user=user, teacher_rows=teacher_rows)
 
 @app.route("/admin/courses")
 @role_required("admin")
 def admin_courses():
     user = User.query.get(session["user_id"])
-    courses = Course.query.all()
+    courses = Course.query.order_by(Course.code, Course.name).all()
     teachers = User.query.filter_by(role="teacher").all()
     t_map = {t.id: t for t in teachers}
-    return render_template("admin_courses.html", user=user, courses=courses, t_map=t_map)
+    course_rows = build_admin_course_rows(courses, t_map)
+    return render_template("admin_courses.html", user=user, course_rows=course_rows, t_map=t_map)
 
 @app.route("/admin/rooms")
 @role_required("admin")
 def admin_rooms():
     user = User.query.get(session["user_id"])
-    rooms = Room.query.all()
+    rooms = Room.query.order_by(Room.name).all()
     return render_template("admin_rooms.html", user=user, rooms=rooms)
+
+@app.route("/admin/rooms/empty", methods=["POST"])
+@role_required("admin")
+def admin_empty_rooms():
+    data = request.get_json(silent=True) or request.form
+    day = safe_text(data.get("day"))
+    date_text = safe_text(data.get("date"))
+    start_text = safe_text(data.get("start_time"))
+    end_text = safe_text(data.get("end_time"))
+
+    if date_text:
+        try:
+            selected = datetime.strptime(date_text, "%Y-%m-%d")
+            day = WEEKDAYS[selected.weekday()] if selected.weekday() < len(WEEKDAYS) else selected.strftime("%A")
+        except ValueError:
+            return jsonify({"success": False, "error": "Please enter a valid date."}), 400
+
+    start_min = parse_time_value(start_text)
+    end_min = parse_time_value(end_text)
+    if not day or start_min is None or end_min is None or start_min >= end_min:
+        return jsonify({"success": False, "error": "Please select a day/date and a valid time range."}), 400
+
+    rooms = Room.query.order_by(Room.name).all()
+    empty_rooms = find_empty_rooms_for_slot(rooms, day, start_min, end_min)
+    return jsonify({
+        "success": True,
+        "day": day,
+        "start_time": format_time_minutes(start_min),
+        "end_time": format_time_minutes(end_min),
+        "rooms": empty_rooms,
+        "count": len(empty_rooms),
+    })
 
 @app.route("/admin/groups")
 @role_required("admin")
 def admin_groups():
     user = User.query.get(session["user_id"])
-    groups = Group.query.all()
-    return render_template("admin_groups.html", user=user, groups=groups)
+    groups = Group.query.order_by(Group.name).all()
+    group_rows = build_admin_group_rows(groups)
+    return render_template("admin_groups.html", user=user, group_rows=group_rows)
 
 @app.route("/admin/generated-timetable")
 @role_required("admin")
 def admin_generated_timetable():
     user = User.query.get(session["user_id"])
-    schedule = ScheduleEntry.query.order_by(ScheduleEntry.day, ScheduleEntry.time_start).all()
-    entries = build_timetable_context(schedule)
-    conflicts = detect_conflicts(schedule)
+    last_upload = UploadedTimetableFile.query.filter_by(uploaded_by=user.id).order_by(UploadedTimetableFile.uploaded_at.desc()).first()
+    if last_upload and last_upload.analysis_status in ["uploaded", "analyzed", "issues"]:
+        generated_schedule = []
+    else:
+        generated_schedule = GeneratedTimetable.query.order_by(GeneratedTimetable.day, GeneratedTimetable.start_time).all()
+    if generated_schedule:
+        entries = build_generated_master_rows(generated_schedule)
+        source_label = "Smart timetable draft"
+    else:
+        schedule = ScheduleEntry.query.order_by(ScheduleEntry.day, ScheduleEntry.time_start).all()
+        entries = build_schedule_master_rows(schedule)
+        source_label = "Active timetable"
+    conflicts = detect_master_row_conflicts(entries)
     is_published = get_publish_status()
     return render_template("generated_timetable.html", user=user, entries=entries,
-                           conflict_count=len(conflicts), is_published=is_published)
+                           conflict_count=len(conflicts), is_published=is_published,
+                           source_label=source_label)
+
+@app.route("/admin/send-timetable", methods=["POST"])
+@role_required("admin")
+def send_timetable_to_sections():
+    redirect_target = get_form_redirect_target("admin_generated_timetable")
+    try:
+        last_upload = UploadedTimetableFile.query.filter_by(uploaded_by=session["user_id"]).order_by(UploadedTimetableFile.uploaded_at.desc()).first()
+        generated_count = GeneratedTimetable.query.count()
+        if last_upload and last_upload.analysis_status in ["uploaded", "analyzed", "issues"]:
+            generated_count = 0
+        active_count = ScheduleEntry.query.count()
+        if generated_count:
+            sent_count = sync_generated_timetable_to_schedule()
+        elif active_count:
+            settings = get_or_create_settings()
+            settings.is_timetable_published = True
+            db.session.commit()
+            sent_count = active_count
+        else:
+            flash("No timetable entries are available to send.", "error")
+            return redirect(redirect_target)
+
+        if sent_count:
+            flash(f"{sent_count} class sessions were sent to the teacher and student sections.", "success")
+        else:
+            flash("No scheduled sessions were available to send.", "error")
+    except Exception:
+        db.session.rollback()
+        flash("Could not send the timetable. Please check the generated rows and try again.", "error")
+    return redirect(redirect_target)
 
 @app.route("/admin/publish-timetable", methods=["POST"])
 @role_required("admin")
 def publish_timetable():
-    settings = SystemSettings.query.first()
-    if not settings:
-        settings = SystemSettings(is_timetable_published=False)
-        db.session.add(settings)
+    settings = get_or_create_settings()
     settings.is_timetable_published = not settings.is_timetable_published
     db.session.commit()
     status = "published" if settings.is_timetable_published else "unpublished"
@@ -807,6 +1237,29 @@ def admin_settings():
     user = User.query.get(session["user_id"])
     uni = University.query.first()
     return render_template("admin_settings.html", user=user, university=uni)
+
+@app.route("/admin/change-password", methods=["POST"])
+@role_required("admin")
+def admin_change_password():
+    user = User.query.get(session["user_id"])
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_new_password = request.form.get("confirm_new_password", "")
+
+    if not check_password_hash(user.password_hash, current_password):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("admin_settings"))
+    if new_password != confirm_new_password:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("admin_settings"))
+    if len(new_password) < 8 or not re.search(r"[A-Z]", new_password):
+        flash("New password must be at least 8 characters long and include at least 1 capital letter.", "error")
+        return redirect(url_for("admin_settings"))
+
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+    flash("Admin password updated successfully.", "success")
+    return redirect(url_for("admin_settings"))
 
 # ─────────────── EXCEL TIMETABLE ROUTES ───────────────
 
@@ -1491,9 +1944,16 @@ def upload_excel():
     if not filepath:
         return jsonify({"success": False, "error": "Invalid upload path."})
     f.save(filepath)
+    clear_generated_timetable()
     rec = UploadedTimetableFile(filename=filename, uploaded_by=session["user_id"], analysis_status="uploaded")
-    db.session.add(rec); db.session.commit()
-    return jsonify({"success": True, "filename": filename, "upload_id": rec.id})
+    db.session.add(rec)
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "upload_id": rec.id,
+        "message": "New Excel file uploaded. Previous generated draft was cleared.",
+    })
 
 @app.route("/admin/analyze-excel", methods=["POST"])
 @role_required("admin")
@@ -1507,6 +1967,8 @@ def analyze_excel():
         return jsonify({"success": False, "error": "Invalid filename."})
     if not os.path.exists(filepath):
         return jsonify({"success": False, "error": "File not found on server."})
+    clear_generated_timetable()
+    db.session.commit()
     try:
         sheets, schema_errors = read_excel_sheets(filepath)
         result = validate_excel_data(sheets, schema_errors)
@@ -1520,8 +1982,14 @@ def analyze_excel():
             "can_generate": result["can_generate"],
         })
     except ValueError as e:
+        db.session.rollback()
+        UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "issues"})
+        db.session.commit()
         return jsonify({"success": False, "error": str(e)})
     except Exception:
+        db.session.rollback()
+        UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "issues"})
+        db.session.commit()
         return jsonify({"success": False, "error": "Could not read Excel file. Please check the workbook format and required sheets."})
 
 @app.route("/admin/generate-from-excel", methods=["POST"])
@@ -1536,10 +2004,14 @@ def generate_from_excel():
         return jsonify({"success": False, "error": "Invalid filename."})
     if not os.path.exists(filepath):
         return jsonify({"success": False, "error": "File not found."})
+    clear_generated_timetable()
+    db.session.commit()
     try:
         sheets, schema_errors = read_excel_sheets(filepath)
         validation = validate_excel_data(sheets, schema_errors)
         if not validation["can_generate"]:
+            UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "issues"})
+            db.session.commit()
             return jsonify({
                 "success": False,
                 "error": "Excel validation failed. Fix the listed issues before generating.",
@@ -1548,11 +2020,11 @@ def generate_from_excel():
             })
 
         timetable, conflicts, optimization_score = generate_optimized_timetable(sheets)
-        GeneratedTimetable.query.delete()
-        db.session.commit()
         for entry in timetable:
             db.session.add(GeneratedTimetable(**entry))
         UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "generated"})
+        settings = get_or_create_settings()
+        settings.is_timetable_published = False
         db.session.commit()
 
         total = len(timetable) + len(conflicts)
@@ -1571,8 +2043,14 @@ def generate_from_excel():
             "warnings": validation["warnings"],
         })
     except ValueError as e:
+        db.session.rollback()
+        UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "issues"})
+        db.session.commit()
         return jsonify({"success": False, "error": str(e)})
     except Exception:
+        db.session.rollback()
+        UploadedTimetableFile.query.filter_by(filename=filename).update({"analysis_status": "issues"})
+        db.session.commit()
         return jsonify({"success": False, "error": "Generation failed. Please verify the Excel data and try again."})
 
 @app.route("/admin/export-timetable")
@@ -1603,6 +2081,576 @@ def export_timetable():
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ─────────────── HELPERS ───────────────
+def safe_text(value):
+    if value is None:
+        return ""
+    return str(value).strip()
+
+def unique_by_id(items):
+    seen = set()
+    unique = []
+    for item in items:
+        if not item or item.id in seen:
+            continue
+        seen.add(item.id)
+        unique.append(item)
+    return unique
+
+def build_teacher_timetable_context(user, extra_lesson_form=None, available_rooms=None):
+    is_published = get_publish_status()
+    if is_published:
+        schedule = ScheduleEntry.query.filter_by(teacher_id=user.id).order_by(ScheduleEntry.day, ScheduleEntry.time_start).all()
+    else:
+        schedule = []
+    entries = build_timetable_context(schedule)
+    days_order = list(WEEKDAYS)
+    timetable_by_day = {day: [] for day in days_order}
+    for item in entries:
+        day = item["entry"].day
+        if day not in timetable_by_day:
+            timetable_by_day[day] = []
+            days_order.append(day)
+        timetable_by_day[day].append(item)
+
+    teacher_courses = Course.query.filter_by(teacher_id=user.id).order_by(Course.code, Course.name).all()
+    extra_lesson_requests = build_extra_lesson_request_rows(
+        ExtraLessonRequest.query.filter_by(teacher_id=user.id).order_by(ExtraLessonRequest.created_at.desc()).limit(5).all()
+    )
+    form_data = extra_lesson_form or {
+        "course_id": str(teacher_courses[0].id) if teacher_courses else "",
+        "date": "",
+        "start_time": "",
+        "end_time": "",
+        "message": "",
+    }
+    return {
+        "user": user,
+        "timetable_by_day": timetable_by_day,
+        "days_order": days_order,
+        "is_published": is_published,
+        "total": len(entries),
+        "teacher_courses": teacher_courses,
+        "extra_lesson_form": form_data,
+        "available_rooms": available_rooms,
+        "extra_lesson_requests": extra_lesson_requests,
+    }
+
+def parse_extra_lesson_form(user, require_room=False):
+    errors = []
+    course_id = request.form.get("course_id", type=int)
+    date_text = safe_text(request.form.get("date"))
+    start_text = safe_text(request.form.get("start_time"))
+    end_text = safe_text(request.form.get("end_time"))
+    message = safe_text(request.form.get("message"))[:500]
+    room_id = request.form.get("room_id", type=int)
+
+    course = Course.query.filter_by(id=course_id, teacher_id=user.id).first() if course_id else None
+    if not course:
+        errors.append("Please select one of your courses.")
+
+    lesson_date = None
+    day = ""
+    if date_text:
+        try:
+            lesson_date = datetime.strptime(date_text, "%Y-%m-%d").date()
+            day = lesson_date.strftime("%A")
+        except ValueError:
+            errors.append("Please enter a valid lesson date.")
+    else:
+        errors.append("Please select a lesson date.")
+
+    start_min = parse_time_value(start_text)
+    end_min = parse_time_value(end_text)
+    if start_min is None or end_min is None or start_min >= end_min:
+        errors.append("Please enter a valid start and end time.")
+
+    if require_room and not room_id:
+        errors.append("Please select an available room.")
+
+    return {
+        "course_id": str(course_id or ""),
+        "course": course,
+        "room_id": room_id,
+        "date": date_text,
+        "lesson_date": lesson_date,
+        "day": day,
+        "start_time": format_time_minutes(start_min) if start_min is not None else start_text,
+        "end_time": format_time_minutes(end_min) if end_min is not None else end_text,
+        "start_min": start_min,
+        "end_min": end_min,
+        "message": message,
+    }, errors
+
+def find_available_extra_lesson_rooms(course, day, lesson_date, start_min, end_min):
+    room_query = Room.query
+    if course and course.is_lab:
+        room_query = room_query.filter_by(is_lab=True)
+    rooms = room_query.order_by(Room.name).all()
+    return find_empty_rooms_for_slot(rooms, day, start_min, end_min, lesson_date=lesson_date)
+
+def teacher_has_slot_conflict(user, day, lesson_date, start_min, end_min):
+    for entry in ScheduleEntry.query.filter_by(teacher_id=user.id, day=day).all():
+        entry_start = parse_time_value(entry.time_start)
+        entry_end = parse_time_value(entry.time_end)
+        if entry_start is not None and entry_end is not None and intervals_overlap(entry_start, entry_end, start_min, end_min):
+            return True
+
+    for row in GeneratedTimetable.query.filter_by(day=day).all():
+        if normalize_lookup_text(row.status) and normalize_lookup_text(row.status) != "scheduled":
+            continue
+        if normalize_lookup_text(row.teacher_name) != normalize_lookup_text(user.full_name):
+            continue
+        row_start = parse_time_value(row.start_time)
+        row_end = parse_time_value(row.end_time)
+        if row_start is not None and row_end is not None and intervals_overlap(row_start, row_end, start_min, end_min):
+            return True
+
+    for request_row in ExtraLessonRequest.query.filter_by(teacher_id=user.id).all():
+        if normalize_lookup_text(request_row.status) == "cancelled":
+            continue
+        if not dates_match(request_row.lesson_date, lesson_date):
+            continue
+        row_start = parse_time_value(request_row.start_time)
+        row_end = parse_time_value(request_row.end_time)
+        if row_start is not None and row_end is not None and intervals_overlap(row_start, row_end, start_min, end_min):
+            return True
+    return False
+
+def build_extra_lesson_request_rows(requests):
+    rows = []
+    for request_row in requests:
+        teacher = User.query.get(request_row.teacher_id)
+        course = Course.query.get(request_row.course_id)
+        room = Room.query.get(request_row.room_id)
+        teacher_name = safe_text(teacher.full_name if teacher else "Unknown teacher")
+        course_label = safe_text(f"{course.code} - {course.name}" if course else "Unknown course")
+        room_name = safe_text(room.name if room else "Unknown room")
+        lesson_date = format_lesson_date(request_row.lesson_date)
+        admin_message = (
+            f"{teacher_name} will teach an extra lesson for {course_label} in room {room_name} "
+            f"on {lesson_date} from {safe_text(request_row.start_time)} to {safe_text(request_row.end_time)}."
+        )
+        if safe_text(request_row.message):
+            admin_message = f"{admin_message} Note: {safe_text(request_row.message)}"
+        rows.append({
+            "request": request_row,
+            "teacher": teacher,
+            "course": course,
+            "room": room,
+            "lesson_date": lesson_date,
+            "teacher_name": teacher_name,
+            "course_label": course_label,
+            "room_name": room_name,
+            "admin_message": admin_message,
+        })
+    return rows
+
+def build_extra_lesson_announcement(request_row):
+    row = build_extra_lesson_request_rows([request_row])[0]
+    return Announcement(
+        title=row["admin_message"],
+        announcement_type="important",
+        audience="all",
+        source_type="extra_lesson",
+        source_id=request_row.id,
+    )
+
+def build_recent_announcements(audience, limit=10):
+    allowed = ["all", audience]
+    rows = Announcement.query.filter(Announcement.audience.in_(allowed)).order_by(Announcement.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "title": safe_text(row.title),
+            "date": format_lesson_date(row.created_at),
+            "type": safe_text(row.announcement_type) or "info",
+        }
+        for row in rows
+    ]
+
+def format_lesson_date(value):
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    return safe_text(value)
+
+def dates_match(stored_date, selected_date):
+    if selected_date is None:
+        return False
+    if hasattr(stored_date, "isoformat"):
+        return stored_date == selected_date
+    return safe_text(stored_date) == selected_date.isoformat()
+
+def build_admin_student_rows(students):
+    rows = []
+    for student in students:
+        group = Group.query.get(student.group_id) if student.group_id else None
+        courses = []
+        for enrollment in Enrollment.query.filter_by(student_id=student.id).all():
+            course = Course.query.get(enrollment.course_id)
+            teacher = User.query.get(course.teacher_id) if course else None
+            if course:
+                courses.append({"course": course, "teacher": teacher, "enrollment": enrollment})
+        rows.append({"student": student, "group": group, "courses": courses})
+    return rows
+
+def build_admin_teacher_rows(teachers):
+    rows = []
+    for teacher in teachers:
+        courses = Course.query.filter_by(teacher_id=teacher.id).order_by(Course.code, Course.name).all()
+        schedule = []
+        for entry in ScheduleEntry.query.filter_by(teacher_id=teacher.id).order_by(ScheduleEntry.day, ScheduleEntry.time_start).all():
+            schedule.append({
+                "entry": entry,
+                "course": Course.query.get(entry.course_id),
+                "room": Room.query.get(entry.room_id),
+                "group": Group.query.get(entry.group_id),
+            })
+        student_ids = set()
+        for course in courses:
+            for enrollment in Enrollment.query.filter_by(course_id=course.id).all():
+                student_ids.add(enrollment.student_id)
+        rows.append({
+            "teacher": teacher,
+            "courses": courses,
+            "schedule": schedule,
+            "student_count": len(student_ids),
+        })
+    return rows
+
+def students_for_course_group(course_id, group_id):
+    enrolled_students = []
+    for enrollment in Enrollment.query.filter_by(course_id=course_id).all():
+        student = User.query.get(enrollment.student_id)
+        if student and student.group_id == group_id:
+            enrolled_students.append(student)
+    if enrolled_students:
+        return sorted(unique_by_id(enrolled_students), key=lambda item: item.full_name)
+    return User.query.filter_by(role="student", group_id=group_id).order_by(User.full_name).all()
+
+def build_admin_course_rows(courses, t_map):
+    rows = []
+    for course in courses:
+        groups = []
+        for entry in ScheduleEntry.query.filter_by(course_id=course.id).all():
+            group = Group.query.get(entry.group_id)
+            if group:
+                groups.append(group)
+        for enrollment in Enrollment.query.filter_by(course_id=course.id).all():
+            student = User.query.get(enrollment.student_id)
+            group = Group.query.get(student.group_id) if student and student.group_id else None
+            if group:
+                groups.append(group)
+
+        group_rows = []
+        for group in sorted(unique_by_id(groups), key=lambda item: item.name):
+            group_rows.append({
+                "group": group,
+                "students": students_for_course_group(course.id, group.id),
+            })
+
+        rows.append({
+            "course": course,
+            "teacher": t_map.get(course.teacher_id),
+            "groups": group_rows,
+        })
+    return rows
+
+def build_admin_group_rows(groups):
+    rows = []
+    for group in groups:
+        students = User.query.filter_by(role="student", group_id=group.id).order_by(User.full_name).all()
+        schedule_entries = ScheduleEntry.query.filter_by(group_id=group.id).order_by(ScheduleEntry.day, ScheduleEntry.time_start).all()
+        courses = unique_by_id([Course.query.get(entry.course_id) for entry in schedule_entries])
+        rows.append({"group": group, "students": students, "courses": courses})
+    return rows
+
+def generated_row_overlaps_room(row, room_name, day, start_min, end_min):
+    if normalize_lookup_text(row.status) and normalize_lookup_text(row.status) != "scheduled":
+        return False
+    if normalize_lookup_text(row.room_name) != normalize_lookup_text(room_name):
+        return False
+    row_start = parse_time_value(row.start_time)
+    row_end = parse_time_value(row.end_time)
+    return row.day == day and row_start is not None and row_end is not None and intervals_overlap(row_start, row_end, start_min, end_min)
+
+def schedule_entry_overlaps_room(entry, room_id, day, start_min, end_min):
+    row_start = parse_time_value(entry.time_start)
+    row_end = parse_time_value(entry.time_end)
+    return entry.room_id == room_id and entry.day == day and row_start is not None and row_end is not None and intervals_overlap(row_start, row_end, start_min, end_min)
+
+def extra_lesson_overlaps_room(request_row, room_id, day, start_min, end_min, lesson_date=None):
+    if normalize_lookup_text(request_row.status) == "cancelled":
+        return False
+    if request_row.room_id != room_id:
+        return False
+    if lesson_date is not None:
+        if not dates_match(request_row.lesson_date, lesson_date):
+            return False
+    elif request_row.day != day:
+        return False
+    row_start = parse_time_value(request_row.start_time)
+    row_end = parse_time_value(request_row.end_time)
+    return row_start is not None and row_end is not None and intervals_overlap(row_start, row_end, start_min, end_min)
+
+def find_empty_rooms_for_slot(rooms, day, start_min, end_min, lesson_date=None):
+    generated_rows = GeneratedTimetable.query.all()
+    schedule_entries = ScheduleEntry.query.all()
+    extra_lesson_requests = ExtraLessonRequest.query.all()
+    results = []
+    for room in rooms:
+        if generated_rows:
+            booked = any(generated_row_overlaps_room(row, room.name, day, start_min, end_min) for row in generated_rows)
+        else:
+            booked = any(schedule_entry_overlaps_room(entry, room.id, day, start_min, end_min) for entry in schedule_entries)
+        if not booked:
+            booked = any(extra_lesson_overlaps_room(row, room.id, day, start_min, end_min, lesson_date=lesson_date) for row in extra_lesson_requests)
+        if not booked:
+            results.append({
+                "id": room.id,
+                "name": room.name,
+                "capacity": room.capacity,
+                "type": "Laboratory" if room.is_lab else "Standard Class",
+            })
+    return results
+
+def normalize_lookup_text(value):
+    return " ".join(safe_text(value).lower().split())
+
+def get_or_create_settings():
+    settings = SystemSettings.query.first()
+    if not settings:
+        settings = SystemSettings(is_timetable_published=False)
+        db.session.add(settings)
+        db.session.flush()
+    return settings
+
+def get_default_university():
+    uni = University.query.first()
+    if not uni:
+        uni = University(
+            name="EMM",
+            domain=f"generated-{uuid.uuid4().hex[:8]}.local",
+            address="Imported timetable",
+            founded=datetime.utcnow().year,
+        )
+        db.session.add(uni)
+        db.session.flush()
+    return uni
+
+def initials_from_name(name):
+    parts = [part for part in safe_text(name).split() if part]
+    initials = "".join(part[0] for part in parts[:2]).upper()
+    return initials[:5] or "T"
+
+def generated_email_for_name(name, role):
+    base = re.sub(r"[^a-z0-9]+", ".", safe_text(name).lower()).strip(".")
+    base = base or uuid.uuid4().hex[:8]
+    candidate = f"{role}-{base}@generated.local"
+    suffix = 2
+    while User.query.filter_by(email=candidate).first():
+        candidate = f"{role}-{base}-{suffix}@generated.local"
+        suffix += 1
+    return candidate
+
+def find_teacher_by_name(name):
+    target = normalize_lookup_text(name)
+    if not target:
+        return None
+    for teacher in User.query.filter_by(role="teacher").all():
+        if normalize_lookup_text(teacher.full_name) == target:
+            return teacher
+    return None
+
+def find_room_by_name(name):
+    target = normalize_lookup_text(name)
+    if not target:
+        return None
+    for room in Room.query.all():
+        if normalize_lookup_text(room.name) == target:
+            return room
+    return None
+
+def find_group_by_name(name):
+    target = normalize_lookup_text(name)
+    if not target:
+        return None
+    for group in Group.query.all():
+        if normalize_lookup_text(group.name) == target:
+            return group
+    return None
+
+def ensure_teacher_for_generated(row, university):
+    name = safe_text(row.teacher_name) or "Unassigned Teacher"
+    teacher = find_teacher_by_name(name)
+    if teacher:
+        return teacher
+    teacher = User(
+        full_name=name,
+        email=generated_email_for_name(name, "teacher"),
+        password_hash=generate_password_hash("password123"),
+        role="teacher",
+        university_id=university.id,
+        department="Imported",
+        avatar_initials=initials_from_name(name),
+    )
+    db.session.add(teacher)
+    db.session.flush()
+    return teacher
+
+def ensure_room_for_generated(row, university):
+    name = safe_text(row.room_name) or "Unassigned Room"
+    room = find_room_by_name(name)
+    if room:
+        room.is_lab = room.is_lab or normalize_lookup_text(row.course_type) == "lab"
+        return room
+    room = Room(
+        name=name,
+        capacity=30,
+        is_lab=normalize_lookup_text(row.course_type) == "lab",
+        university_id=university.id,
+    )
+    db.session.add(room)
+    db.session.flush()
+    return room
+
+def ensure_group_for_generated(row, university):
+    name = safe_text(row.group_name) or "Unassigned Group"
+    group = find_group_by_name(name)
+    if group:
+        return group
+    group = Group(name=name, year=1, size=0, university_id=university.id)
+    db.session.add(group)
+    db.session.flush()
+    return group
+
+def ensure_course_for_generated(row, teacher, university):
+    code = safe_text(row.course_id) or f"GEN{row.id}"
+    name = safe_text(row.course_name) or code
+    is_lab = normalize_lookup_text(row.course_type) == "lab"
+    course = Course.query.filter_by(code=code).first()
+    if not course:
+        course = Course(
+            code=code,
+            name=name,
+            credits=3,
+            is_lab=is_lab,
+            teacher_id=teacher.id,
+            university_id=university.id,
+            color="#0f8f5f" if not is_lab else "#7c3aed",
+        )
+        db.session.add(course)
+        db.session.flush()
+        return course
+    course.name = name
+    course.is_lab = is_lab
+    course.teacher_id = teacher.id
+    if not course.university_id:
+        course.university_id = university.id
+    return course
+
+def sync_generated_timetable_to_schedule():
+    generated_rows = GeneratedTimetable.query.order_by(GeneratedTimetable.day, GeneratedTimetable.start_time).all()
+    if not generated_rows:
+        return 0
+
+    university = get_default_university()
+    ScheduleEntry.query.delete()
+    sent_count = 0
+
+    for row in generated_rows:
+        status = normalize_lookup_text(row.status) or "scheduled"
+        if status != "scheduled":
+            continue
+        teacher = ensure_teacher_for_generated(row, university)
+        room = ensure_room_for_generated(row, university)
+        group = ensure_group_for_generated(row, university)
+        course = ensure_course_for_generated(row, teacher, university)
+        db.session.add(ScheduleEntry(
+            course_id=course.id,
+            teacher_id=teacher.id,
+            room_id=room.id,
+            group_id=group.id,
+            day=safe_text(row.day),
+            time_start=safe_text(row.start_time),
+            time_end=safe_text(row.end_time),
+            semester="Generated Timetable",
+        ))
+        sent_count += 1
+
+    settings = get_or_create_settings()
+    settings.is_timetable_published = sent_count > 0
+    db.session.commit()
+    return sent_count
+
+def sort_master_rows(rows):
+    day_order = {day: idx for idx, day in enumerate(WEEKDAYS)}
+    return sorted(rows, key=lambda row: (
+        day_order.get(row["day"], 99),
+        row["time_start"],
+        row["time_end"],
+        row["course_code"],
+        row["group_name"],
+    ))
+
+def build_generated_master_rows(generated_rows):
+    rows = []
+    for row in generated_rows:
+        is_lab = normalize_lookup_text(row.course_type) == "lab"
+        rows.append({
+            "day": safe_text(row.day),
+            "time_start": safe_text(row.start_time),
+            "time_end": safe_text(row.end_time),
+            "course_code": safe_text(row.course_id),
+            "course_name": safe_text(row.course_name),
+            "teacher_name": safe_text(row.teacher_name),
+            "room_name": safe_text(row.room_name),
+            "group_name": safe_text(row.group_name),
+            "course_type": safe_text(row.course_type) or "lecture",
+            "status": safe_text(row.status) or "scheduled",
+            "is_lab": is_lab,
+            "course_color": "#7c3aed" if is_lab else "#0f8f5f",
+        })
+    return sort_master_rows(rows)
+
+def build_schedule_master_rows(schedule):
+    rows = []
+    for item in build_timetable_context(schedule):
+        entry = item["entry"]
+        course = item["course"]
+        teacher = item["teacher"]
+        room = item["room"]
+        group = item["group"]
+        is_lab = bool(course and course.is_lab)
+        rows.append({
+            "day": safe_text(entry.day),
+            "time_start": safe_text(entry.time_start),
+            "time_end": safe_text(entry.time_end),
+            "course_code": safe_text(course.code if course else ""),
+            "course_name": safe_text(course.name if course else "Unknown Course"),
+            "teacher_name": safe_text(teacher.full_name if teacher else "Unassigned Teacher"),
+            "room_name": safe_text(room.name if room else "Unassigned Room"),
+            "group_name": safe_text(group.name if group else "Unassigned Group"),
+            "course_type": "lab" if is_lab else "lecture",
+            "status": "scheduled",
+            "is_lab": is_lab,
+            "course_color": course.color if course and course.color else "#0f8f5f",
+        })
+    return sort_master_rows(rows)
+
+def detect_master_row_conflicts(rows):
+    conflicts = []
+    seen = {}
+    for idx, row in enumerate(rows):
+        for resource in ("teacher_name", "room_name", "group_name"):
+            value = normalize_lookup_text(row[resource])
+            if not value:
+                continue
+            key = (resource, value, row["day"], row["time_start"])
+            if key in seen:
+                conflicts.append((seen[key], idx, key))
+            else:
+                seen[key] = idx
+    return conflicts
+
 def build_timetable_context(schedule):
     entries = []
     for e in schedule:

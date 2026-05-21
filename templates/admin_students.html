@@ -8,8 +8,23 @@
         <h3 class="panel-title"><i class="fa-solid fa-user-graduate text-primary"></i> <span data-i18n="enrolled_students">Enrolled Students</span></h3>
     </div>
     <div class="panel-body">
+        <div class="admin-filter-bar">
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="students" data-admin-filter-field="name" type="search" placeholder="Filter by student name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Department</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="students" data-admin-filter-field="department" type="search" placeholder="Filter by department">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Year</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="students" data-admin-filter-field="year" type="search" placeholder="Filter by year">
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table">
+            <table class="table admin-table">
                 <thead>
                     <tr>
                         <th data-i18n="avatar">Avatar</th>
@@ -17,24 +32,60 @@
                         <th data-i18n="email">Email</th>
                         <th data-i18n="department">Department</th>
                         <th data-i18n="year">Year</th>
-                        <th data-i18n="actions">Actions</th>
+                        <th>Group</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for s in students %}
-                    <tr>
+                    {% for row in student_rows %}
+                    {% set s = row.student %}
+                    <tr class="admin-data-row admin-click-row" data-filter-scope="students" data-name="{{ s.full_name|lower }}" data-department="{{ (s.department or '')|lower }}" data-year="{{ s.year or '' }}" data-detail-target="student-detail-{{ s.id }}">
                         <td>
-                            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;">
-                                {{ s.avatar_initials }}
-                            </div>
+                            <div class="admin-avatar">{{ s.avatar_initials }}</div>
                         </td>
                         <td><strong>{{ s.full_name }}</strong></td>
                         <td class="text-muted">{{ s.email }}</td>
                         <td data-i18n-dynamic="true">{{ s.department or 'N/A' }}</td>
                         <td>{{ s.year or '-' }}</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        <td>{% if row.group %}<span class="badge badge-info">{{ row.group.name }}</span>{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+                    </tr>
+                    <tr class="admin-detail-row" id="student-detail-{{ s.id }}" hidden>
+                        <td colspan="6">
+                            <div class="admin-detail-card">
+                                <div class="admin-detail-grid">
+                                    <div>
+                                        <span class="admin-detail-label">Full Name</span>
+                                        <strong>{{ s.full_name }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Gmail</span>
+                                        <strong>{{ s.email }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Department</span>
+                                        <strong>{{ s.department or 'N/A' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Year</span>
+                                        <strong>{{ s.year or '-' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Group</span>
+                                        <strong>{{ row.group.name if row.group else 'Unassigned' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="admin-detail-section">
+                                    <h4>Enrolled Subjects</h4>
+                                    {% if row.courses %}
+                                    <div class="admin-chip-list">
+                                        {% for item in row.courses %}
+                                        <span class="admin-chip">{{ item.course.code }} - {{ item.course.name }}{% if item.teacher %} / {{ item.teacher.full_name }}{% endif %}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">No enrolled subjects found.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

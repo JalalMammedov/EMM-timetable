@@ -8,25 +8,75 @@
         <h3 class="panel-title"><i class="fa-solid fa-users text-primary"></i> <span data-i18n="student_groups">Student Groups</span></h3>
     </div>
     <div class="panel-body">
+        <div class="admin-filter-bar">
+            <div class="form-group">
+                <label class="form-label">Group Name</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="groups" data-admin-filter-field="group" type="search" placeholder="Filter by group name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Year</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="groups" data-admin-filter-field="year" type="search" placeholder="Filter by year">
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table">
+            <table class="table admin-table">
                 <thead>
                     <tr>
                         <th data-i18n="group_name">Group Name</th>
                         <th data-i18n="year">Year</th>
                         <th data-i18n="group_size">Group Size</th>
-                        <th data-i18n="actions">Actions</th>
+                        <th>Students</th>
+                        <th>Scheduled Subjects</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for g in groups %}
-                    <tr>
+                    {% for row in group_rows %}
+                    {% set g = row.group %}
+                    <tr class="admin-data-row admin-click-row" data-filter-scope="groups" data-group="{{ g.name|lower }}" data-year="{{ g.year }}" data-detail-target="group-detail-{{ g.id }}">
                         <td><span class="badge badge-primary" style="background: rgba(0,0,0,0.05); color: var(--text);"><strong>{{ g.name }}</strong></span></td>
                         <td>Year {{ g.year }}</td>
                         <td>{{ g.size }} Students</td>
-                        <td>
-                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        <td><span class="badge badge-info">{{ row.students|length }} Students</span></td>
+                        <td><span class="badge badge-primary">{{ row.courses|length }} Subjects</span></td>
+                    </tr>
+                    <tr class="admin-detail-row" id="group-detail-{{ g.id }}" hidden>
+                        <td colspan="5">
+                            <div class="admin-detail-card">
+                                <div class="admin-detail-grid">
+                                    <div>
+                                        <span class="admin-detail-label">Group</span>
+                                        <strong>{{ g.name }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Year</span>
+                                        <strong>{{ g.year }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Capacity</span>
+                                        <strong>{{ g.size }} Students</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Actual Students</span>
+                                        <strong>{{ row.students|length }}</strong>
+                                    </div>
+                                </div>
+                                <div class="admin-detail-section">
+                                    <h4>Students in This Group</h4>
+                                    {% if row.students %}
+                                    <div class="admin-mini-list">
+                                        {% for student in row.students %}
+                                        <div>
+                                            <strong>{{ student.full_name }}</strong>
+                                            <span>{{ student.email }}</span>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">No students assigned to this group.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

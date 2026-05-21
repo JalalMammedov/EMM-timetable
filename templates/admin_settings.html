@@ -47,6 +47,31 @@
                 </button>
             </div>
         </div>
+        <div class="panel">
+            <div class="panel-header">
+                <h3 class="panel-title"><i class="fa-solid fa-key text-primary"></i> Admin Password</h3>
+            </div>
+            <div class="panel-body">
+                <form action="{{ url_for('admin_change_password') }}" method="POST">
+                    <div class="form-group">
+                        <label class="form-label">Current Password</label>
+                        <input class="form-control" type="password" name="current_password" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">New Password</label>
+                        <input class="form-control" type="password" name="new_password" minlength="8" pattern="(?=.*[A-Z]).{8,}" title="At least 8 characters and 1 capital letter" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Confirm New Password</label>
+                        <input class="form-control" type="password" name="confirm_new_password" minlength="8" required>
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%;" type="submit">
+                        <i class="fa-solid fa-lock"></i>
+                        Change Password
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -8,8 +8,19 @@
         <h3 class="panel-title"><i class="fa-solid fa-book-open text-primary"></i> <span data-i18n="academic_courses">Academic Courses</span></h3>
     </div>
     <div class="panel-body">
+        <div class="admin-filter-bar">
+            <div class="form-group">
+                <label class="form-label">Code</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="courses" data-admin-filter-field="code" type="search" placeholder="Filter by subject code">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Subject Name</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="courses" data-admin-filter-field="name" type="search" placeholder="Filter by subject name">
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table">
+            <table class="table admin-table">
                 <thead>
                     <tr>
                         <th data-i18n="color">Color</th>
@@ -18,35 +29,80 @@
                         <th data-i18n="credits">Credits</th>
                         <th data-i18n="type">Type</th>
                         <th data-i18n="assigned_teacher">Assigned Teacher</th>
-                        <th data-i18n="actions">Actions</th>
+                        <th>Groups</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for c in courses %}
-                    <tr>
-                        <td>
-                            <div style="width: 20px; height: 20px; border-radius: 4px; background-color: {{ c.color }};"></div>
-                        </td>
+                    {% for row in course_rows %}
+                    {% set c = row.course %}
+                    <tr class="admin-data-row admin-click-row" data-filter-scope="courses" data-code="{{ c.code|lower }}" data-name="{{ c.name|lower }}" data-detail-target="course-detail-{{ c.id }}">
+                        <td><div style="width: 20px; height: 20px; border-radius: 4px; background-color: {{ c.color }};"></div></td>
                         <td><span class="badge badge-primary" style="background: rgba(0,0,0,0.05); color: var(--text);">{{ c.code }}</span></td>
                         <td><strong>{{ c.name }}</strong></td>
                         <td>{{ c.credits }}</td>
                         <td>
                             {% if c.is_lab %}
-                                <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> Lab</span>
+                            <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> Lab</span>
                             {% else %}
-                                <span class="badge badge-primary"><i class="fa-solid fa-chalkboard"></i> Lecture</span>
+                            <span class="badge badge-primary"><i class="fa-solid fa-chalkboard"></i> Lecture</span>
                             {% endif %}
                         </td>
-                        <td class="text-muted">
-                            {% if c.teacher_id in t_map %}
-                                {{ t_map[c.teacher_id].full_name }}
-                            {% else %}
-                                Unassigned
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-sm btn-outline" style="color: var(--danger); border-color: var(--danger);"><i class="fa-solid fa-trash"></i></button>
+                        <td class="text-muted">{{ row.teacher.full_name if row.teacher else 'Unassigned' }}</td>
+                        <td><span class="badge badge-info">{{ row.groups|length }} Groups</span></td>
+                    </tr>
+                    <tr class="admin-detail-row" id="course-detail-{{ c.id }}" hidden>
+                        <td colspan="7">
+                            <div class="admin-detail-card">
+                                <div class="admin-detail-grid">
+                                    <div>
+                                        <span class="admin-detail-label">Subject</span>
+                                        <strong>{{ c.code }} - {{ c.name }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Teacher</span>
+                                        <strong>{{ row.teacher.full_name if row.teacher else 'Unassigned' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Credits</span>
+                                        <strong>{{ c.credits }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="admin-detail-label">Type</span>
+                                        <strong>{{ 'Lab' if c.is_lab else 'Lecture' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="admin-detail-section">
+                                    <h4>Groups Taking This Subject</h4>
+                                    {% if row.groups %}
+                                    <div class="admin-chip-list">
+                                        {% for group_row in row.groups %}
+                                        <button class="admin-chip admin-chip-button" type="button" data-nested-target="course-{{ c.id }}-group-{{ group_row.group.id }}">
+                                            {{ group_row.group.name }} / Year {{ group_row.group.year }}
+                                        </button>
+                                        {% endfor %}
+                                    </div>
+                                    {% for group_row in row.groups %}
+                                    <div class="admin-nested-panel" id="course-{{ c.id }}-group-{{ group_row.group.id }}" hidden>
+                                        <h4>{{ group_row.group.name }} Students</h4>
+                                        {% if group_row.students %}
+                                        <div class="admin-mini-list">
+                                            {% for student in group_row.students %}
+                                            <div>
+                                                <strong>{{ student.full_name }}</strong>
+                                                <span>{{ student.email }}</span>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <p class="text-muted">No students found in this group for this subject.</p>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                    {% else %}
+                                    <p class="text-muted">No scheduled or enrolled groups found for this subject.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

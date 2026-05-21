@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initializeExcelTimetableBuilder();
+    initializeAdminTools();
 
     // i18n Translation Dictionary
     const translations = {
@@ -101,8 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
             'nav_courses': 'Courses',
             'nav_grades': 'Grades',
             'nav_profile': 'Profile',
-            'nav_my_classes': 'My Classes',
-            'nav_grade_management': 'Grade Management',
             'nav_admin_dashboard': 'Admin Dashboard',
             'nav_smart_timetable': 'Smart Timetable',
             'nav_students': 'Students',
@@ -240,8 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
             'nav_courses': 'Fənlər',
             'nav_grades': 'Qiymətlər',
             'nav_profile': 'Profil',
-            'nav_my_classes': 'Mənim Dərslərim',
-            'nav_grade_management': 'Qiymət İdarəetməsi',
             'nav_admin_dashboard': 'Admin Paneli',
             'nav_smart_timetable': 'Ağıllı Cədvəl',
             'nav_students': 'Tələbələr',
@@ -599,6 +596,7 @@ function initializeExcelTimetableBuilder() {
         btnAnalyze.disabled = false;
         document.getElementById('analysis-section').hidden = true;
         document.getElementById('results-section').hidden = true;
+        renderLatestGeneratedPanel([], 'No timetable has been generated for the latest uploaded file yet.');
         btnExport.hidden = true;
     }
 
@@ -640,6 +638,10 @@ function initializeExcelTimetableBuilder() {
                 }
                 state.uploadedFilename = uploadData.filename;
                 state.pendingFile = null;
+                renderLatestGeneratedPanel([], 'No timetable has been generated for the latest uploaded file yet.');
+                if (uploadData.message) {
+                    showToast(uploadData.message, 'success');
+                }
             }
 
             if (!state.uploadedFilename) {
@@ -658,6 +660,7 @@ function initializeExcelTimetableBuilder() {
             }
 
             renderAnalysis(analysisData);
+            renderLatestGeneratedPanel([], 'No timetable has been generated for the latest uploaded file yet.');
             showToast(analysisData.can_generate ? 'Excel analyzed successfully.' : 'Excel analyzed with issues.', analysisData.can_generate ? 'success' : 'error');
         } catch (error) {
             showToast(error.message, 'error');
@@ -777,20 +780,27 @@ function initializeExcelTimetableBuilder() {
             </div>
         `).join('');
 
-        renderTimetableTable(data.timetable || []);
-        renderWeeklyGrid(data.timetable || []);
+        const timetable = data.timetable || [];
+        renderTimetableTable(timetable);
+        renderWeeklyGrid(timetable);
+        renderLatestGeneratedPanel(timetable);
         renderConflicts(data.conflicts || []);
         document.getElementById('results-section').hidden = false;
         btnExport.hidden = false;
-        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const latestPanel = document.getElementById('latest-generated-panel');
+        (latestPanel || document.getElementById('results-section')).scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function renderTimetableTable(entries) {
+    function getSortedTimetableEntries(entries) {
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-        const sorted = [...entries].sort((a, b) => {
+        return [...entries].sort((a, b) => {
             const dayCompare = days.indexOf(a.day) - days.indexOf(b.day);
             return dayCompare || String(a.start_time).localeCompare(String(b.start_time));
         });
+    }
+
+    function renderTimetableTable(entries) {
+        const sorted = getSortedTimetableEntries(entries);
 
         const tbody = document.getElementById('result-tbody');
         if (!sorted.length) {
@@ -810,6 +820,45 @@ function initializeExcelTimetableBuilder() {
                 <td><span class="badge badge-success"><i class="fa-solid fa-check"></i> ${escapeHtml(entry.status)}</span></td>
             </tr>
         `).join('');
+    }
+
+    function renderLatestGeneratedPanel(entries, emptyMessage = 'No scheduled sessions were generated.') {
+        const panel = document.getElementById('latest-generated-panel');
+        const tbody = document.getElementById('latest-generated-tbody');
+        const count = document.getElementById('latest-generated-count');
+        const actions = document.getElementById('latest-generated-actions');
+        if (!panel || !tbody) return;
+
+        const sorted = getSortedTimetableEntries(entries);
+        panel.hidden = false;
+        if (actions) {
+            actions.hidden = sorted.length === 0;
+        }
+        if (count) {
+            count.textContent = `${sorted.length} ${sorted.length === 1 ? 'Class' : 'Classes'}`;
+        }
+
+        if (!sorted.length) {
+            tbody.innerHTML = `<tr><td colspan="8" class="empty-table-message">${escapeHtml(emptyMessage)}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = sorted.map(entry => {
+            const courseType = entry.course_type || 'lecture';
+            const status = entry.status || 'scheduled';
+            return `
+                <tr>
+                    <td><span class="badge badge-primary">${escapeHtml(entry.day)}</span></td>
+                    <td>${escapeHtml(entry.start_time)} - ${escapeHtml(entry.end_time)}</td>
+                    <td><strong>${escapeHtml(entry.course_id)}</strong> ${escapeHtml(entry.course_name)}</td>
+                    <td>${escapeHtml(entry.teacher_name)}</td>
+                    <td>${roomBadge(entry)}</td>
+                    <td><span class="badge badge-info">${escapeHtml(entry.group_name)}</span></td>
+                    <td><span class="badge ${courseType === 'lab' ? 'badge-warning' : 'badge-primary'}">${escapeHtml(courseType)}</span></td>
+                    <td><span class="badge badge-success"><i class="fa-solid fa-check"></i> ${escapeHtml(status)}</span></td>
+                </tr>
+            `;
+        }).join('');
     }
 
     function roomBadge(entry) {
@@ -905,6 +954,54 @@ function initializeExcelTimetableBuilder() {
         document.getElementById('weekly-grid-container').innerHTML = '';
         document.getElementById('conflict-panel').hidden = true;
     }
+}
+
+function initializeAdminTools() {
+    const filterInputs = document.querySelectorAll('.admin-filter-input');
+    filterInputs.forEach(input => {
+        input.addEventListener('input', () => applyAdminFilters(input.dataset.adminFilterTarget));
+    });
+
+    document.querySelectorAll('.admin-click-row[data-detail-target]').forEach(row => {
+        row.addEventListener('click', event => {
+            if (event.target.closest('button, a, input, select, textarea, label')) return;
+            const target = document.getElementById(row.dataset.detailTarget);
+            if (!target) return;
+            target.hidden = !target.hidden;
+            row.classList.toggle('is-open', !target.hidden);
+        });
+    });
+
+    document.querySelectorAll('[data-nested-target]').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            const target = document.getElementById(button.dataset.nestedTarget);
+            if (!target) return;
+            target.hidden = !target.hidden;
+        });
+    });
+
+}
+
+function applyAdminFilters(scope) {
+    if (!scope) return;
+    const inputs = Array.from(document.querySelectorAll(`.admin-filter-input[data-admin-filter-target="${scope}"]`));
+    const rows = document.querySelectorAll(`.admin-data-row[data-filter-scope="${scope}"]`);
+
+    rows.forEach(row => {
+        const visible = inputs.every(input => {
+            const value = input.value.trim().toLowerCase();
+            if (!value) return true;
+            const field = input.dataset.adminFilterField;
+            return String(row.dataset[field] || '').toLowerCase().includes(value);
+        });
+        row.hidden = !visible;
+        if (!visible && row.dataset.detailTarget) {
+            const detail = document.getElementById(row.dataset.detailTarget);
+            if (detail) detail.hidden = true;
+            row.classList.remove('is-open');
+        }
+    });
 }
 
 async function fetchJson(url, options) {

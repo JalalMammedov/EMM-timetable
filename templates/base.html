@@ -31,14 +31,10 @@
                 {% if session_role == 'student' %}
                     <li><a href="{{ url_for('student_dashboard') }}" class="{% if request.endpoint == 'student_dashboard' %}active{% endif %}"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav_dashboard">Dashboard</span></a></li>
                     <li><a href="{{ url_for('student_timetable') }}" class="{% if request.endpoint == 'student_timetable' %}active{% endif %}"><i class="fa-solid fa-calendar-week"></i> <span data-i18n="my_timetable">My Timetable</span></a></li>
-                    <li><a href="{{ url_for('courses') }}" class="{% if request.endpoint == 'courses' %}active{% endif %}"><i class="fa-solid fa-book"></i> <span data-i18n="nav_courses">Courses</span></a></li>
-                    <li><a href="{{ url_for('grades') }}" class="{% if request.endpoint == 'grades' %}active{% endif %}"><i class="fa-solid fa-graduation-cap"></i> <span data-i18n="nav_grades">Grades</span></a></li>
                     <li><a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}"><i class="fa-solid fa-user"></i> <span data-i18n="nav_profile">Profile</span></a></li>
                 {% elif session_role == 'teacher' %}
                     <li><a href="{{ url_for('teacher_dashboard') }}" class="{% if request.endpoint == 'teacher_dashboard' %}active{% endif %}"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="nav_dashboard">Dashboard</span></a></li>
                     <li><a href="{{ url_for('teacher_timetable') }}" class="{% if request.endpoint == 'teacher_timetable' %}active{% endif %}"><i class="fa-solid fa-calendar-week"></i> <span>My Schedule</span></a></li>
-                    <li><a href="{{ url_for('courses') }}" class="{% if request.endpoint == 'courses' %}active{% endif %}"><i class="fa-solid fa-chalkboard-user"></i> <span data-i18n="nav_my_classes">My Classes</span></a></li>
-                    <li><a href="{{ url_for('grades') }}" class="{% if request.endpoint == 'grades' %}active{% endif %}"><i class="fa-solid fa-clipboard-list"></i> <span data-i18n="nav_grade_management">Grade Management</span></a></li>
                     <li><a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}"><i class="fa-solid fa-user"></i> <span data-i18n="nav_profile">Profile</span></a></li>
                 {% elif session_role == 'admin' %}
                     <li><a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><i class="fa-solid fa-gauge"></i> <span data-i18n="nav_admin_dashboard">Admin Dashboard</span></a></li>
@@ -48,7 +44,6 @@
                     <li><a href="{{ url_for('admin_courses') }}" class="{% if request.endpoint == 'admin_courses' %}active{% endif %}"><i class="fa-solid fa-book-open"></i> <span data-i18n="nav_courses">Courses</span></a></li>
                     <li><a href="{{ url_for('admin_rooms') }}" class="{% if request.endpoint == 'admin_rooms' %}active{% endif %}"><i class="fa-solid fa-door-open"></i> <span data-i18n="nav_rooms">Rooms</span></a></li>
                     <li><a href="{{ url_for('admin_groups') }}" class="{% if request.endpoint == 'admin_groups' %}active{% endif %}"><i class="fa-solid fa-users"></i> <span data-i18n="nav_groups">Groups</span></a></li>
-                    <li><a href="{{ url_for('admin_generated_timetable') }}" class="{% if request.endpoint == 'admin_generated_timetable' %}active{% endif %}"><i class="fa-solid fa-table"></i> <span data-i18n="nav_generated_timetable">Generated Timetable</span></a></li>
                     <li><a href="{{ url_for('admin_settings') }}" class="{% if request.endpoint == 'admin_settings' %}active{% endif %}"><i class="fa-solid fa-gear"></i> <span data-i18n="nav_settings">Settings</span></a></li>
                 {% endif %}
             </ul>

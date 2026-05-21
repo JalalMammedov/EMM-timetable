@@ -15,10 +15,21 @@
             Upload academic Excel data and generate an optimized conflict-free weekly timetable.
         </p>
     </div>
-    <a href="{{ url_for('download_template') }}" class="btn btn-outline">
-        <i class="fa-solid fa-file-arrow-down"></i>
-        Download Excel Template
-    </a>
+    <div class="excel-builder-header-actions">
+        <a href="{{ url_for('download_template') }}" class="btn btn-outline">
+            <i class="fa-solid fa-file-arrow-down"></i>
+            Download Excel Template
+        </a>
+        {% if last_results %}
+        <form action="{{ url_for('send_timetable_to_sections') }}" method="POST" class="inline-action-form">
+            <input type="hidden" name="next" value="{{ url_for('timetable_builder') }}">
+            <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-paper-plane"></i>
+                Send to Teachers and Students
+            </button>
+        </form>
+        {% endif %}
+    </div>
 </section>
 
 {% if not excel_available %}
@@ -176,6 +187,16 @@
         <div id="grid-view" class="weekly-grid-wrap" hidden>
             <div class="weekly-grid" id="weekly-grid-container"></div>
         </div>
+        <div class="send-timetable-actions builder-send-actions">
+            <form action="{{ url_for('send_timetable_to_sections') }}" method="POST">
+                <input type="hidden" name="next" value="{{ url_for('timetable_builder') }}">
+                <button type="submit" class="btn btn-primary btn-send-timetable">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    Send Timetable to Teachers and Students
+                </button>
+            </form>
+            <p>Teachers will see only their own class hours. Students will see the weekly schedule for their group.</p>
+        </div>
     </div>
 
     <div class="panel conflict-panel" id="conflict-panel" hidden>
@@ -192,17 +213,26 @@
     </div>
 </section>
 
-{% if last_results %}
-<section class="panel smart-builder-panel previous-results-panel">
+<section class="panel smart-builder-panel latest-generated-panel" id="latest-generated-panel" {% if not last_results and not latest_generated_message %}hidden{% endif %}>
     <div class="panel-header">
         <h3 class="panel-title">
             <i class="fa-solid fa-clock-rotate-left text-primary"></i>
-            Previous Generated Timetable
+            Latest Generated Timetable
+            <span class="badge badge-primary" id="latest-generated-count">{{ last_results|length if last_results else 0 }} Classes</span>
         </h3>
-        <a href="{{ url_for('export_timetable') }}" class="btn btn-sm btn-outline">
-            <i class="fa-solid fa-file-export"></i>
-            Export
-        </a>
+        <div class="panel-header-actions" id="latest-generated-actions" {% if not last_results %}hidden{% endif %}>
+            <a href="{{ url_for('export_timetable') }}" class="btn btn-sm btn-outline">
+                <i class="fa-solid fa-file-export"></i>
+                Export
+            </a>
+            <form action="{{ url_for('send_timetable_to_sections') }}" method="POST" class="inline-action-form">
+                <input type="hidden" name="next" value="{{ url_for('timetable_builder') }}">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    Send
+                </button>
+            </form>
+        </div>
     </div>
     <div class="panel-body timetable-table-body">
         <table class="table">
@@ -218,7 +248,8 @@
                     <th>Status</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="latest-generated-tbody">
+            {% if last_results %}
             {% for e in last_results %}
                 <tr>
                     <td><span class="badge badge-primary">{{ e.day }}</span></td>
@@ -237,9 +268,13 @@
                     <td><span class="badge badge-success"><i class="fa-solid fa-check"></i> {{ e.status }}</span></td>
                 </tr>
             {% endfor %}
+            {% elif latest_generated_message %}
+                <tr>
+                    <td colspan="8" class="empty-table-message">{{ latest_generated_message }}</td>
+                </tr>
+            {% endif %}
             </tbody>
         </table>
     </div>
 </section>
-{% endif %}
 {% endblock %}

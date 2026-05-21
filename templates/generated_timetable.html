@@ -7,23 +7,42 @@
     <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
         <h3 class="panel-title"><i class="fa-solid fa-table text-primary"></i> Complete Master Timetable</h3>
         <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="badge badge-info">{{ source_label }}</span>
             <span class="badge {% if conflict_count > 0 %}badge-danger{% else %}badge-success{% endif %}">
                 <i class="fa-solid {% if conflict_count > 0 %}fa-triangle-exclamation{% else %}fa-check{% endif %}"></i>
                 {{ conflict_count }} Conflicts
             </span>
             <span class="badge badge-primary">{{ entries|length }} Total Classes</span>
-            {% if entries %}
-            <form action="{{ url_for('publish_timetable') }}" method="POST" style="margin: 0;">
-                <button type="submit" class="btn {% if is_published %}btn-danger-outline{% else %}btn-primary{% endif %} btn-sm">
-                    <i class="fa-solid {% if is_published %}fa-eye-slash{% else %}fa-eye{% endif %}"></i> 
-                    {% if is_published %}Unpublish{% else %}Publish{% endif %}
-                </button>
-            </form>
-            {% endif %}
         </div>
     </div>
     <div class="panel-body">
         {% if entries %}
+        <div class="admin-filter-bar admin-filter-bar-wide">
+            <div class="form-group">
+                <label class="form-label">Day</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="day" type="search" placeholder="Filter day">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Time</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="time" type="search" placeholder="Filter time">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Course</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="course" type="search" placeholder="Filter course">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Teacher</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="teacher" type="search" placeholder="Filter teacher">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Room</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="room" type="search" placeholder="Filter room">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Group</label>
+                <input class="form-control admin-filter-input" data-admin-filter-target="generated" data-admin-filter-field="group" type="search" placeholder="Filter group">
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table" id="full-timetable">
                 <thead>
@@ -38,28 +57,37 @@
                 </thead>
                 <tbody>
                     {% for item in entries %}
-                    <tr>
-                        <td><span class="badge badge-primary">{{ item.entry.day }}</span></td>
-                        <td style="font-weight: 500;">{{ item.entry.time_start }} - {{ item.entry.time_end }}</td>
+                    <tr class="admin-data-row" data-filter-scope="generated" data-day="{{ item.day|lower }}" data-time="{{ item.time_start }} {{ item.time_end }}" data-course="{{ (item.course_code ~ ' ' ~ item.course_name)|lower }}" data-teacher="{{ item.teacher_name|lower }}" data-room="{{ item.room_name|lower }}" data-group="{{ item.group_name|lower }}">
+                        <td><span class="badge badge-primary">{{ item.day }}</span></td>
+                        <td style="font-weight: 500;">{{ item.time_start }} - {{ item.time_end }}</td>
                         <td>
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ item.course.color }};"></div>
-                                <strong>{{ item.course.code }}</strong> {{ item.course.name }}
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: {{ item.course_color }};"></div>
+                                <strong>{{ item.course_code }}</strong> {{ item.course_name }}
                             </div>
                         </td>
-                        <td>{{ item.teacher.full_name }}</td>
+                        <td>{{ item.teacher_name }}</td>
                         <td>
-                            {% if item.course.is_lab %}
-                                <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> {{ item.room.name }}</span>
+                            {% if item.is_lab %}
+                                <span class="badge" style="background: #e0e7ff; color: #3730a3;"><i class="fa-solid fa-flask"></i> {{ item.room_name }}</span>
                             {% else %}
-                                {{ item.room.name }}
+                                {{ item.room_name }}
                             {% endif %}
                         </td>
-                        <td><span class="badge badge-info">{{ item.group.name }}</span></td>
+                        <td><span class="badge badge-info">{{ item.group_name }}</span></td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+        <div class="send-timetable-actions">
+            <form action="{{ url_for('send_timetable_to_sections') }}" method="POST">
+                <button type="submit" class="btn btn-primary btn-send-timetable">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    {% if is_published %}Resend Updated Schedule{% else %}Send Schedule to Teachers and Students{% endif %}
+                </button>
+            </form>
+            <p>Teachers will see only their own class hours. Students will see the weekly schedule for their group.</p>
         </div>
         {% else %}
         <div style="text-align: center; padding: 60px; color: var(--muted);">

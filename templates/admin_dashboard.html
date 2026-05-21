@@ -56,48 +56,66 @@
     </div>
 </div>
 
-<div class="builder-layout">
-    <div style="flex: 1;">
-        <div class="panel">
-            <div class="panel-header">
-                <h3 class="panel-title"><i class="fa-solid fa-clock-rotate-left text-primary"></i> <span data-i18n="recent_entries">Recently Generated Entries</span></h3>
-            </div>
-            <div class="panel-body">
-                {% if recent_entries %}
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Day</th>
-                                <th>Time</th>
-                                <th>Course</th>
-                                <th>Teacher</th>
-                                <th>Room</th>
-                                <th>Group</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in recent_entries %}
-                            <tr>
-                                <td><span class="badge badge-primary">{{ item.entry.day }}</span></td>
-                                <td style="font-weight: 500;">{{ item.entry.time_start }}</td>
-                                <td><strong>{{ item.course.code }}</strong></td>
-                                <td>{{ item.teacher.full_name }}</td>
-                                <td>{{ item.room.name }}</td>
-                                <td><span class="badge badge-info">{{ item.group.name }}</span></td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <p class="text-muted text-center py-4">No timetable entries found.</p>
-                {% endif %}
-            </div>
-        </div>
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-bullhorn text-primary"></i> <span data-i18n="recent_announcements">Recent Announcements</span></h3>
     </div>
+    <div class="panel-body" style="padding: 0;">
+        {% if announcements %}
+            {% for ann in announcements %}
+            <div style="padding: 16px 24px; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span class="badge badge-{{ 'danger' if ann.type == 'important' else ('warning' if ann.type == 'warning' else 'info') }}" style="font-size: 10px;" data-i18n-dynamic="true">{{ ann.type|upper }}</span>
+                    <span style="font-size: 12px; color: var(--muted);">{{ ann.date }}</span>
+                </div>
+                <p style="font-weight: 500; font-size: 14px;" data-i18n-dynamic="true">{{ ann.title }}</p>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted" style="padding: 18px 24px;">No announcements yet.</p>
+        {% endif %}
+    </div>
+</div>
 
-    <div style="width: 320px;">
+<div class="panel">
+    <div class="panel-header">
+        <h3 class="panel-title"><i class="fa-solid fa-envelope-open-text text-primary"></i> Extra Lesson Notifications</h3>
+    </div>
+    <div class="panel-body">
+        {% if extra_lesson_rows %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Teacher</th>
+                        <th>Course</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Room</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in extra_lesson_rows %}
+                    <tr>
+                        <td><strong>{{ item.teacher_name }}</strong></td>
+                        <td>{{ item.course_label }}</td>
+                        <td>{{ item.lesson_date }}</td>
+                        <td>{{ item.request.start_time }} - {{ item.request.end_time }}</td>
+                        <td><span class="badge badge-primary">{{ item.room_name }}</span></td>
+                        <td>{{ item.admin_message }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No extra lesson notifications yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div style="max-width: 360px;">
         <div class="panel">
             <div class="panel-header">
                 <h3 class="panel-title"><i class="fa-solid fa-bolt text-primary"></i> <span data-i18n="quick_actions">Quick Actions</span></h3>
@@ -120,6 +138,5 @@
                 </a>
             </div>
         </div>
-    </div>
 </div>
 {% endblock %}
